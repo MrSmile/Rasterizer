@@ -2,11 +2,11 @@
 //
 
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
+#include "raster.h"
 #include <iostream>
 
 using namespace std;
+
 
 
 void print_outline(const FT_Outline &path)
@@ -59,6 +59,11 @@ int main()
     }
 
     print_outline(face->glyph->outline);
+
+    Polyline poly;
+    if(poly.create(face->glyph->outline))
+        cout << "-------------------------------\nSUCCESS" << endl;
+    else cout << "-------------------------------\nFAIL" << endl;
 
     FT_Done_Face(face);  FT_Done_FreeType(lib);  return 0;
 }

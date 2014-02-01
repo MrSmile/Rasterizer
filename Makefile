@@ -1,6 +1,6 @@
 
-SOURCE = main.cpp
-HEADER =
+SOURCE = raster.cpp main.cpp
+HEADER = point.h raster.h
 FLAGS = -std=c++11 -I/usr/include/freetype2 -fno-exceptions -Wall -Wno-parentheses
 LIBS = -lfreetype
 PROGRAM = raster
