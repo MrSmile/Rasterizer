@@ -31,6 +31,9 @@ void print_outline(const FT_Outline &path)
 
 int main()
 {
+    Polyline().test();  return 0;
+
+
     FT_Library lib;
     if(FT_Init_FreeType(&lib))
     {
@@ -64,6 +67,8 @@ int main()
     if(poly.create(face->glyph->outline))
         cout << "-------------------------------\nSUCCESS" << endl;
     else cout << "-------------------------------\nFAIL" << endl;
+
+    poly.rasterize(0, 0, 64, 64);  poly.print();
 
     FT_Done_Face(face);  FT_Done_FreeType(lib);  return 0;
 }
