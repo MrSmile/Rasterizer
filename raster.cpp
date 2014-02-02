@@ -178,8 +178,8 @@ void Polyline::fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value
 {
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + r.y * stride;
-    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr += stride)
+    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
+    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr -= stride)
         for(int32_t i = 0; i < int32_t(1) << x_ord; i++)ptr[i] = value;
 }
 
@@ -192,8 +192,8 @@ void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a
 
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + r.y * stride;
-    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr += stride)
+    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
+    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr -= stride)
         for(int32_t i = 0; i < int32_t(1) << x_ord; i++)
         {
             int64_t val = c - aa * i - bb * j;
@@ -394,7 +394,8 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, size_t offs, i
     }*/
     if(x_ord == pixel_order && y_ord == pixel_order)
     {
-        bitmap[(orig.x >> pixel_order) + (orig.y >> pixel_order) * stride] = calc_pixel(offs, winding);
+        Point r = orig >> pixel_order;
+        bitmap[r.x + (size_y - r.y - 1) * stride] = calc_pixel(offs, winding);
         line.resize(offs);  return;
     }
 
@@ -434,7 +435,8 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
     while(int32_t(1) << y_ord < height)y_ord++;
 
     stride = size_t(1) << (x_ord - pixel_order);
-    bitmap.resize(stride << (y_ord - pixel_order));
+    size_y = size_t(1) << (y_ord - pixel_order);
+    bitmap.resize(stride * size_y);
 
     int winding;  size_t offs = 0;
     if(x_max >= int32_t(1) << x_ord)
@@ -459,11 +461,11 @@ inline void print_cell(uint8_t val)
     cout << hex[(val >> 4) & 15] << hex[val & 15];
 }
 
-void Polyline::print()
+void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t stride)
 {
-    for(size_t pos = bitmap.size() - stride; pos != -stride; pos -= stride)
+    for(size_t i = 0; i < height; i++, image += stride)
     {
-        for(size_t i = 0; i < stride; i++)print_cell(bitmap[pos + i]);
+        for(size_t j = 0; j < width; j++)print_cell(image[j]);
         cout << "\x1B[0m\n";
     }
     cout.flush();

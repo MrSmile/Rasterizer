@@ -4,6 +4,7 @@
 
 #include "raster.h"
 #include <iostream>
+#include FT_OUTLINE_H
 
 using namespace std;
 
@@ -61,14 +62,32 @@ int main()
         FT_Done_Face(face);  FT_Done_FreeType(lib);  return -1;
     }
 
-    print_outline(face->glyph->outline);
+    cout << "-----------------------------------------" << endl;
 
     Polyline poly;
-    if(poly.create(face->glyph->outline))
-        cout << "-------------------------------\nSUCCESS" << endl;
-    else cout << "-------------------------------\nFAIL" << endl;
-
+    poly.create(face->glyph->outline);
     poly.rasterize(0, 0, 64, 64);  poly.print();
+    const uint8_t *cmp = poly.image();
+
+    cout << "-----------------------------------------" << endl;
+
+    FT_Bitmap bm;
+    bm.rows = poly.height();  bm.width = bm.pitch = poly.width();
+    vector<uint8_t> image(bm.rows * bm.pitch);  bm.buffer = image.data();
+    bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
+    FT_Outline_Get_Bitmap(lib, &face->glyph->outline, &bm);
+
+    print_bitmap(bm.buffer, bm.width, bm.rows, bm.pitch);
+
+    cout << "-----------------------------------------" << endl;
+
+    for(int k = 0; k < bm.rows * bm.pitch; k++)
+        bm.buffer[k] = 8 * abs(bm.buffer[k] - cmp[k]);
+
+    print_bitmap(bm.buffer, bm.width, bm.rows, bm.pitch);
+
+    cout << "-----------------------------------------" << endl;
+
 
     FT_Done_Face(face);  FT_Done_FreeType(lib);  return 0;
 }

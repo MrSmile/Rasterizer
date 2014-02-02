@@ -9,6 +9,9 @@
 
 
 
+void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t stride);
+
+
 class Polyline
 {
     static constexpr int pixel_order = 6;
@@ -76,7 +79,7 @@ class Polyline
     std::vector<Line> line;
     int32_t x_min, x_max, y_min, y_max;
     std::vector<uint8_t> bitmap;
-    size_t stride;
+    size_t stride, size_y;
 
 
     bool add_line(const Point &pt0, const Point &pt1);
@@ -94,7 +97,27 @@ class Polyline
 public:
     bool create(const FT_Outline &path);
     void rasterize(int x0, int y0, int width, int height);
-    void print();
+
+    const uint8_t *image() const
+    {
+        return bitmap.data();
+    }
+
+    const size_t width() const
+    {
+        return stride;
+    }
+
+    const size_t height() const
+    {
+        return size_y;
+    }
+
+    void print() const
+    {
+        print_bitmap(bitmap.data(), stride, size_y, stride);
+    }
+
 
     void test();  // DEBUG
 };
