@@ -255,10 +255,15 @@ void Polyline::Line::move_y(int32_t y)
     if(is_split_y() && is_ur_dl())flags &= ~f_exact_x;
 }
 
+static int32_t div_floor(int64_t a, int32_t b)
+{
+    return (a < 0) == (b < 0) ? a / b : -(abs(a) + abs(b) - 1) / abs(b);
+}
+
 void Polyline::Line::split_horz(int32_t x, Line &next)
 {
     next.a = a;  next.b = b;  next.c = c - a * x;
-    int32_t y = next.c / b, y1 = y;  if(b * y != next.c)y1++;  // TODO: optimize out division
+    int32_t y = div_floor(next.c, b), y1 = y;  if(b * y != next.c)y1++;  // TODO: optimize out division
     assert(y <= next.c / double(b) && y1 >= next.c / double(b));
 
     next.x_min = 0;  next.x_max = x_max - x;  x_max = x;
@@ -277,7 +282,7 @@ void Polyline::Line::split_horz(int32_t x, Line &next)
 void Polyline::Line::split_vert(int32_t y, Line &next)
 {
     next.a = a;  next.b = b;  next.c = c - b * y;
-    int32_t x = next.c / a, x1 = x;  if(a * x != next.c)x1++;  // TODO: optimize out division
+    int32_t x = div_floor(next.c, a), x1 = x;  if(a * x != next.c)x1++;  // TODO: optimize out division
     assert(x <= next.c / double(a) && x1 >= next.c / double(a));
 
     next.y_min = 0;  next.y_max = y_max - y;  y_max = y;
@@ -413,8 +418,6 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
 {
     Point orig(x0, y0);  orig <<= pixel_order;
     width <<= pixel_order;  height <<= pixel_order;
-    assert(orig.x <= x_min && orig.x + width >= x_max);
-    assert(orig.y <= y_min && orig.y + height >= y_max);
 
     assert(line.size());
     for(size_t i = 0; i < line.size(); i++)
@@ -423,14 +426,24 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
         line[i].y_min -= orig.y;  line[i].y_max -= orig.y;
         line[i].c -= line[i].a * orig.x + line[i].b * orig.y;
     }
+    x_min -= orig.x;  x_max -= orig.x;
+    y_min -= orig.y;  y_max -= orig.y;
 
     int x_ord = pixel_order, y_ord = pixel_order;
     while(int32_t(1) << x_ord < width)x_ord++;
     while(int32_t(1) << y_ord < height)y_ord++;
 
-    stride = size_t(1) << (max(int(tile_order), x_ord) - pixel_order);
-    bitmap.resize(stride << (max(int(tile_order), y_ord) - pixel_order));
-    rasterize(Point(0, 0), x_ord, y_ord, 0, 0);
+    stride = size_t(1) << (x_ord - pixel_order);
+    bitmap.resize(stride << (y_ord - pixel_order));
+
+    int winding;  size_t offs = 0;
+    if(x_max >= int32_t(1) << x_ord)
+        line.resize(split_horz(0, winding = 0, int32_t(1) << x_ord));
+    if(y_max >= int32_t(1) << y_ord)
+        line.resize(split_vert(0, winding = 0, int32_t(1) << y_ord));
+    if(x_min <= 0)offs = split_horz(offs, winding = 0, 0);
+    if(y_min <= 0)offs = split_vert(offs, winding = 0, 0);
+    rasterize(Point(0, 0), x_ord, y_ord, offs, winding);
 }
 
 

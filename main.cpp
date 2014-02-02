@@ -31,7 +31,7 @@ void print_outline(const FT_Outline &path)
 
 int main()
 {
-    Polyline().test();  return 0;
+    //Polyline().test();  return 0;
 
 
     FT_Library lib;
