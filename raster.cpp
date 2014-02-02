@@ -32,6 +32,7 @@ Polyline::Line::Line(const Point &pt0, const Point &pt1)
 
 bool Polyline::add_line(const Point &pt0, const Point &pt1)
 {
+    if(pt0.x == pt1.x && pt0.y == pt1.y)return true;
     x_min = min(x_min, pt0.x);  x_max = max(x_max, pt0.x);
     y_min = min(y_min, pt0.y);  y_max = max(y_max, pt0.y);
     line.emplace_back(pt0, pt1);  return true;
@@ -185,32 +186,72 @@ void Polyline::fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value
 
 void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c)
 {
+    c = (c - ((a + b) << (pixel_order - 1))) >> (pixel_order - 1);
+    int32_t aa = 2 * a, bb = 2 * b;  a = abs(a);  b = abs(b);
+    uint32_t sum = a + b, diff = abs(a - b), base = 2 * (sum - diff);
+    uint64_t div = 8 * a * b, offs = div << 7;
+
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
     uint8_t *ptr = bitmap.data() + r.x + r.y * stride;
-    c = (c - ((a + b) << (pixel_order - 1))) >> pixel_order;
     for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr += stride)
         for(int32_t i = 0; i < int32_t(1) << x_ord; i++)
-            ptr[i] = a * i + b * j <= c ? 255 : 0;  // TODO: AA
+        {
+            int64_t val = c - aa * i - bb * j;
+            if(abs(val) < sum)
+            {
+                int32_t d = max<int32_t>(0, int32_t(abs(val)) - diff);
+                int64_t res = base * val + (val < 0 ? d * d : -d * d);
+                ptr[i] = (255 * res + offs) / div;  // TODO: overflow
+            }
+            else ptr[i] = val < 0 ? 0 : 255;
+        }
 }
 
 uint8_t Polyline::calc_pixel(size_t offs, int winding)
 {
-    return 0;  // TODO
+    return 127;
+
+    static Point pt[] =
+    {
+        Point(0x08, 0x08), Point(0x18, 0x08), Point(0x28, 0x08), Point(0x38, 0x08),
+        Point(0x08, 0x18), Point(0x18, 0x18), Point(0x28, 0x18), Point(0x38, 0x18),
+        Point(0x08, 0x28), Point(0x18, 0x28), Point(0x28, 0x28), Point(0x38, 0x28),
+        Point(0x08, 0x38), Point(0x18, 0x38), Point(0x28, 0x38), Point(0x38, 0x38),
+    };
+    static size_t n = sizeof(pt) / sizeof(pt[0]);
+
+    int8_t wnd[n];
+    for(size_t i = offs; i < line.size(); i++)
+        winding += 1 - (line[i].flags >> Line::s_horz & Line::f_mask);
+    for(size_t k = 0; k < n; k++)wnd[k] = winding;
+    for(size_t i = offs; i < line.size(); i++)
+    {
+        for(size_t k = 0; k < n; k++)
+            if(pt[k].y >= line[i].y_min && pt[k].y < line[i].y_max)
+            {
+                uint8_t hit = uint64_t(line[i].c - line[i].a * pt[k].x - line[i].b * pt[k].y) >> 63;
+                if((hit ^ line[i].flags) & 1)wnd[k] += 1 - ((line[i].flags & 1) << 1);
+            }
+    }
+
+    int res = 0;
+    for(size_t k = 0; k < n; k++)if(wnd[k] & winding_mask)res++;
+    return (255 * res + n / 2) / n;
 }
 
 
 void Polyline::Line::move_x(int32_t x)
 {
     x_min -= x;  x_max -= x;  c -= a * x;
-    if(x_min || !(flags & 1 << s_vert))return;
+    if(x_min || !(flags & 1 << s_horz))return;
     flags ^= flags << (s_vert + 0) & 2 << s_vert | 1 << s_vert;
 }
 
 void Polyline::Line::move_y(int32_t y)
 {
     y_min -= y;  y_max -= y;  c -= b * y;
-    if(y_min || !(flags & 1 << s_horz))return;
+    if(y_min || !(flags & 1 << s_vert))return;
     flags ^= flags << (s_horz + 1) & 2 << s_horz | 1 << s_horz;
 }
 
@@ -335,7 +376,7 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, size_t offs, i
     {
         fill_solid(orig, x_ord, y_ord, winding & winding_mask ? 255 : 0);  return;
     }
-    if(line.size() == offs + 1)
+    /*if(line.size() == offs + 1)
     {
         int flag = 0;
         if(line[offs].c < 0)winding++;
@@ -349,10 +390,10 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, size_t offs, i
         default:  fill_solid(orig, x_ord, y_ord, 255);  break;
         }
         line.pop_back();  return;
-    }
+    }*/
     if(x_ord == pixel_order && y_ord == pixel_order)
     {
-        bitmap[(orig.x >> pixel_order) + (orig.x >> pixel_order) * stride] = calc_pixel(offs, winding);
+        bitmap[(orig.x >> pixel_order) + (orig.y >> pixel_order) * stride] = calc_pixel(offs, winding);
         line.resize(offs);  return;
     }
 
@@ -400,7 +441,7 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
 inline void print_cell(uint8_t val)
 {
     static const uint8_t palette[] =
-        {0, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 15};
+        {232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 15};
 
     cout << "\x1B[48;5;" << int(palette[(val * (sizeof(palette) - 1) + 127) / 255]) << 'm';
     cout << "  ";  return;
