@@ -22,12 +22,11 @@ bool Polyline::Segment::subdivide(const Point &p)
 
 Polyline::Line::Line(const Point &pt0, const Point &pt1)
 {
-    Point r = pt1 - pt0;
-    a = r.y;  b = -r.x;  c = a * pt0.x + b * pt0.y;
+    Point r = pt1 - pt0;  flags = f_exact_x | f_exact_y;
+    if(r.x < 0)flags ^= f_ur_dl;  if(r.y >= 0)flags ^= f_up | f_ur_dl;
     x_min = min(pt0.x, pt1.x);  x_max = max(pt0.x, pt1.x);
     y_min = min(pt0.y, pt1.y);  y_max = max(pt0.y, pt1.y);
-    flags = f_nosplit << s_horz | f_nosplit << s_vert;
-    if(r.x >= 0)flags |= 2;  if(r.y < 0)flags |= 1;
+    a = r.y;  b = -r.x;  c = a * pt0.x + b * pt0.y;
 }
 
 bool Polyline::add_line(const Point &pt0, const Point &pt1)
@@ -210,8 +209,6 @@ void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a
 
 uint8_t Polyline::calc_pixel(size_t offs, int winding)
 {
-    return 127;
-
     static Point pt[] =
     {
         Point(0x08, 0x08), Point(0x18, 0x08), Point(0x28, 0x08), Point(0x38, 0x08),
@@ -223,16 +220,21 @@ uint8_t Polyline::calc_pixel(size_t offs, int winding)
 
     int8_t wnd[n];
     for(size_t i = offs; i < line.size(); i++)
-        winding += 1 - (line[i].flags >> Line::s_horz & Line::f_mask);
+        winding -= line[i].is_split_x() && line[i].is_ur_dl() ? 1 - 2 * (line[i].flags & 1) : 0;
     for(size_t k = 0; k < n; k++)wnd[k] = winding;
     for(size_t i = offs; i < line.size(); i++)
     {
+        int delta = 1 - 2 * (line[i].flags & 1), delta_lim[] = {0, 0};
+        if(line[i].is_split_x())delta_lim[line[i].flags >> 1 & 1] = delta;
+
         for(size_t k = 0; k < n; k++)
-            if(pt[k].y >= line[i].y_min && pt[k].y < line[i].y_max)
+            if(pt[k].y < line[i].y_min)wnd[k] += delta_lim[1];
+            else if(pt[k].y < line[i].y_max)
             {
                 uint8_t hit = uint64_t(line[i].c - line[i].a * pt[k].x - line[i].b * pt[k].y) >> 63;
-                if((hit ^ line[i].flags) & 1)wnd[k] += 1 - ((line[i].flags & 1) << 1);
+                if(~(hit ^ line[i].flags) & 1)wnd[k] += delta;
             }
+            else wnd[k] += delta_lim[0];
     }
 
     int res = 0;
@@ -244,15 +246,13 @@ uint8_t Polyline::calc_pixel(size_t offs, int winding)
 void Polyline::Line::move_x(int32_t x)
 {
     x_min -= x;  x_max -= x;  c -= a * x;
-    if(x_min || !(flags & 1 << s_horz))return;
-    flags ^= flags << (s_vert + 0) & 2 << s_vert | 1 << s_vert;
+    if(is_split_x() && is_ur_dl())flags &= ~f_exact_y;
 }
 
 void Polyline::Line::move_y(int32_t y)
 {
     y_min -= y;  y_max -= y;  c -= b * y;
-    if(y_min || !(flags & 1 << s_vert))return;
-    flags ^= flags << (s_horz + 1) & 2 << s_horz | 1 << s_horz;
+    if(is_split_y() && is_ur_dl())flags &= ~f_exact_x;
 }
 
 void Polyline::Line::split_horz(int32_t x, Line &next)
@@ -262,18 +262,16 @@ void Polyline::Line::split_horz(int32_t x, Line &next)
     assert(y <= next.c / double(b) && y1 >= next.c / double(b));
 
     next.x_min = 0;  next.x_max = x_max - x;  x_max = x;
-    if(ur_dl())
+    if(flags & f_ur_dl)
     {
-        next.flags = flags & f_mask | f_nosplit << s_horz;
+        next.flags = flags & ~f_exact_y | f_exact_x;
         next.y_min = y;  next.y_max = y_max;  y_max = y1;
     }
     else
     {
-        next.flags = flags & (f_mask | f_mask << s_horz);
-        flags = flags & ~(f_mask << s_horz) | f_nosplit << s_horz;
+        next.flags = flags | f_exact_x;  flags &= ~f_exact_y;
         next.y_min = y_min;  next.y_max = y1;  y_min = y;
     }
-    next.flags |= flags << (s_vert + 0) & 2 << s_vert;
 }
 
 void Polyline::Line::split_vert(int32_t y, Line &next)
@@ -283,18 +281,16 @@ void Polyline::Line::split_vert(int32_t y, Line &next)
     assert(x <= next.c / double(a) && x1 >= next.c / double(a));
 
     next.y_min = 0;  next.y_max = y_max - y;  y_max = y;
-    if(ur_dl())
+    if(flags & f_ur_dl)
     {
-        next.flags = flags & f_mask | f_nosplit << s_vert;
+        next.flags = flags & ~f_exact_x | f_exact_y;
         next.x_min = x;  next.x_max = x_max;  x_max = x1;
     }
     else
     {
-        next.flags = flags & (f_mask | f_mask << s_vert);
-        flags = flags & ~(f_mask << s_vert) | f_nosplit << s_vert;
+        next.flags = flags | f_exact_y;  flags &= ~f_exact_x;
         next.x_min = x_min;  next.x_max = x1;  x_min = x;
     }
-    next.flags |= flags << (s_horz + 1) & 2 << s_horz;
 }
 
 size_t Polyline::split_horz(size_t offs, int &winding, int32_t x)
@@ -302,7 +298,7 @@ size_t Polyline::split_horz(size_t offs, int &winding, int32_t x)
     size_t size = line.size(), last = 0;
     for(size_t i = offs; i < size; i++)
     {
-        int delta = (line[i].flags >> Line::s_horz & Line::f_mask) - 1;
+        int delta = line[i].delta_horz();
         if(line[i].x_max <= x)
         {
             winding += delta;  if(line[i].x_min < x)continue;
@@ -310,7 +306,7 @@ size_t Polyline::split_horz(size_t offs, int &winding, int32_t x)
         }
         else if(line[i].x_min < x)
         {
-            if(line[i].ur_dl())winding += delta;  last++;
+            if(line[i].is_ur_dl())winding += delta;  last++;
         }
     }
 
@@ -337,7 +333,7 @@ size_t Polyline::split_vert(size_t offs, int &winding, int32_t y)
     size_t size = line.size(), last = 0;
     for(size_t i = offs; i < size; i++)
     {
-        int delta = (line[i].flags >> Line::s_vert & Line::f_mask) - 1;
+        int delta = line[i].delta_vert();
         if(line[i].y_max <= y)
         {
             winding += delta;  if(line[i].y_min < y)continue;
@@ -345,7 +341,7 @@ size_t Polyline::split_vert(size_t offs, int &winding, int32_t y)
         }
         else if(line[i].y_min < y)
         {
-            if(line[i].ur_dl())winding += delta;  last++;
+            if(line[i].is_ur_dl())winding += delta;  last++;
         }
     }
 
@@ -425,7 +421,7 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
     {
         line[i].x_min -= orig.x;  line[i].x_max -= orig.x;
         line[i].y_min -= orig.y;  line[i].y_max -= orig.y;
-        line[i].c += line[i].a * orig.x + line[i].b * orig.y;
+        line[i].c -= line[i].a * orig.x + line[i].b * orig.y;
     }
 
     int x_ord = pixel_order, y_ord = pixel_order;
@@ -434,7 +430,7 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
 
     stride = size_t(1) << (max(int(tile_order), x_ord) - pixel_order);
     bitmap.resize(stride << (max(int(tile_order), y_ord) - pixel_order));
-    rasterize(orig, x_ord, y_ord, 0, 0);
+    rasterize(Point(0, 0), x_ord, y_ord, 0, 0);
 }
 
 

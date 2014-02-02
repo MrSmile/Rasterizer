@@ -29,7 +29,7 @@ class Polyline
     {
         enum Flags  // TODO: better enum
         {
-            f_mask = 3, f_nosplit = 1, s_horz = 2, s_vert = 4
+            f_up = 1, f_ur_dl = 2, f_exact_x = 4, f_exact_y = 8
         };
 
         uint8_t flags;
@@ -40,9 +40,29 @@ class Polyline
         Line() = default;
         Line(const Point &pt0, const Point &pt1);
 
-        bool ur_dl() const
+        bool is_ur_dl() const
         {
-            return (flags ^ flags >> 1) & 1;
+            return flags & f_ur_dl;
+        }
+
+        bool is_split_x() const
+        {
+            return !x_min && (flags & f_exact_x);
+        }
+
+        bool is_split_y() const
+        {
+            return !y_min && (flags & f_exact_y);
+        }
+
+        int delta_horz() const
+        {
+            return is_split_y() ? 1 - ((2 * flags) & 2) : 0;
+        }
+
+        int delta_vert() const
+        {
+            return is_split_x() ? 1 - ((3 * flags) & 2) : 0;
         }
 
         void move_x(int32_t x);
