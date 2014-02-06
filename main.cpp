@@ -104,7 +104,8 @@ int main()
         FT_Done_FreeType(lib);  return -1;
     }
 
-    if(FT_Set_Pixel_Sizes(face, 64, 0))
+    const int size = 64;
+    if(FT_Set_Pixel_Sizes(face, size, 0))
     {
         cerr << "Cannot set pixel size!" << endl;
         FT_Done_Face(face);  FT_Done_FreeType(lib);  return -1;
@@ -117,7 +118,7 @@ int main()
         cerr << "Cannot load char!" << endl;
         FT_Done_Face(face);  FT_Done_FreeType(lib);  return -1;
     }
-    compare_results(lib, face->glyph->outline, 64, 64);
+    compare_results(lib, face->glyph->outline, size, size);
 
 
     const int n = 26;
@@ -131,7 +132,7 @@ int main()
             cerr << "Cannot load char!" << endl;  exit(-1);
         }
 
-    benchmark(lib, outline, n, 64, 64, 999);
+    benchmark(lib, outline, n, size, size, 9999);
 
     for(int i = 0; i < n; i++)FT_Outline_Done(lib, &outline[i]);
 

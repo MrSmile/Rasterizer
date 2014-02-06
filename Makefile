@@ -10,7 +10,7 @@ debug: $(SOURCE) $(HEADER)
 	g++ -g -O0 -DDEBUG $(FLAGS) $(SOURCE) $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
-	g++ -Ofast -flto -mtune=native -DNDEBUG $(FLAGS) $(SOURCE) $(LIBS) -o $(PROGRAM)
+	g++ -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG $(FLAGS) $(SOURCE) $(LIBS) -o $(PROGRAM)
 
 clean:
 	rm $(PROGRAM)
