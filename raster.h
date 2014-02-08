@@ -101,7 +101,7 @@ private:
     bool add_quadratic(const Point &pt0, const Point &pt1, const Point &pt2);
     bool add_cubic(const Point &pt0, const Point &pt1, const Point &pt2, const Point &pt3);
 
-    void fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value);
+    void fill_solid(const Point &orig, int x_ord, int y_ord, bool set);
     void fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c);
     void fill_generic(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding);
     uint8_t calc_pixel(std::vector<Line> &line, size_t offs, int winding);

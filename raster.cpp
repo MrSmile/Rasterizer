@@ -174,15 +174,6 @@ bool Polyline::create(const FT_Outline &path)
 }
 
 
-void Polyline::fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value)
-{
-    Point r = orig >> pixel_order;
-    x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
-    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr -= stride)
-        for(int32_t i = 0; i < int32_t(1) << x_ord; i++)ptr[i] = value;
-}
-
 uint8_t Polyline::calc_pixel(std::vector<Line> &line, size_t offs, int winding)
 {
     static Point pt[] =
@@ -334,7 +325,7 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, siz
     vector<Line> &line = linebuf[index];
     if(line.size() == offs)
     {
-        fill_solid(orig, x_ord, y_ord, winding & winding_mask ? 255 : 0);  return;
+        fill_solid(orig, x_ord, y_ord, winding & winding_mask);  return;
     }
     if(line.size() == offs + 1)
     {
@@ -344,10 +335,10 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, siz
         if((winding - 1) & winding_mask)flag |= 2;
         switch(flag)
         {
-        case 0:  fill_solid(orig, x_ord, y_ord, 0);  break;
+        case 0:  fill_solid(orig, x_ord, y_ord, false);  break;
         case 1:  fill_halfplane(orig, x_ord, y_ord, line[offs].a, line[offs].b, line[offs].c);  break;
         case 2:  fill_halfplane(orig, x_ord, y_ord, -line[offs].a, -line[offs].b, -line[offs].c);  break;
-        default:  fill_solid(orig, x_ord, y_ord, 255);  break;
+        default:  fill_solid(orig, x_ord, y_ord, true);  break;
         }
         line.pop_back();  return;
     }
@@ -464,5 +455,5 @@ void Polyline::test()
     for(size_t i = 1; i < n; i++)add_line(pt[i - 1], pt[i]);
     add_line(pt[n - 1], pt[0]);
 
-    rasterize(1, 1, 64, 64);  print();
+    rasterize(0, 0, 64, 64);  print();
 }
