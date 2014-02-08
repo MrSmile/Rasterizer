@@ -372,12 +372,18 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, size_t offs, i
         }
         line.pop_back();  return;
     }
+    if(x_ord == pixel_order + 4 && y_ord == pixel_order + 4)
+    {
+        fill_generic(orig, x_ord, y_ord, offs, winding);  line.resize(offs);  return;
+    }
+    /*
     if(x_ord == pixel_order && y_ord == pixel_order)
     {
         Point r = orig >> pixel_order;
         bitmap[r.x + (size_y - r.y - 1) * stride] = calc_pixel(offs, winding);
         line.resize(offs);  return;
     }
+    */
 
     int winding1 = winding;
     size_t offs1;  Point orig1 = orig;

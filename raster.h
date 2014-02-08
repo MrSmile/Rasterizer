@@ -14,6 +14,7 @@ void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t s
 
 class Polyline
 {
+public:
     static constexpr int pixel_order = 6;
     static constexpr int tile_order = 6 + 3;  // 8x8 pixels
     static constexpr int err = 16, e2 = err * err;
@@ -42,6 +43,11 @@ class Polyline
 
         Line() = default;
         Line(const Point &pt0, const Point &pt1);
+
+        bool is_up() const
+        {
+            return flags & f_up;
+        }
 
         bool is_ur_dl() const
         {
@@ -75,6 +81,7 @@ class Polyline
     };
 
 
+private:
     int winding_mask;
     std::vector<Line> line;
     int32_t x_min, x_max, y_min, y_max;
@@ -88,6 +95,7 @@ class Polyline
 
     void fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value);
     void fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c);
+    void fill_generic(const Point &orig, int x_ord, int y_ord, size_t offs, int winding);
     uint8_t calc_pixel(size_t offs, int winding);
 
     size_t split_horz(size_t offs, int &winding, int32_t x);
