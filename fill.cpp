@@ -2,7 +2,6 @@
 //
 
 #include "raster.h"
-#include <iostream>  // DEBUG
 #include <cassert>
 #include <limits>
 
@@ -78,19 +77,13 @@ void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
     uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
+#define LINE(x, y)  case x | y << 8:  ::fill_halfplane<x, y>(ptr, -ptrdiff_t(stride), a, b, c);  return;
     switch(x_ord | y_ord << 8)
     {
-        case 0 | 0 << 8:  ::fill_halfplane<0, 0>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 1 | 0 << 8:  ::fill_halfplane<1, 0>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 1 | 1 << 8:  ::fill_halfplane<1, 1>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 2 | 1 << 8:  ::fill_halfplane<2, 1>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 2 | 2 << 8:  ::fill_halfplane<2, 2>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 3 | 2 << 8:  ::fill_halfplane<3, 2>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 3 | 3 << 8:  ::fill_halfplane<3, 3>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 4 | 3 << 8:  ::fill_halfplane<4, 3>(ptr, -ptrdiff_t(stride), a, b, c);  return;
-        case 4 | 4 << 8:  ::fill_halfplane<4, 4>(ptr, -ptrdiff_t(stride), a, b, c);  return;
+        LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)
         default:  break;
     }
+#undef LINE
 
     constexpr int n = 4;
     int64_t offs = (int64_t(a) + int64_t(b)) << (n - 1);
@@ -107,15 +100,9 @@ void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a
 }
 
 
-struct Segment
-{
-    uint8_t weight;
-    uint16_t total;
-    int16_t a, b, c;
-};
-
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
-    void fill_generic(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
+    void fill_generic(uint8_t *buf, ptrdiff_t stride,
+        const Polyline::Line *line, size_t n_lines, int winding, Polyline::ScanSegment *seg)
 {
     static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
 
@@ -130,7 +117,6 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     size_t index[1 << y_ord], prev = 0;
     for(int i = 0; i < 1 << y_ord; i++)index[i] = (prev += count[i]);
 
-    vector<Segment> seg(n_lines);
     int16_t delta[(1 << y_ord) + 2];  memset(delta, 0, sizeof(delta));
     constexpr int16_t pixel_mask = (1 << Polyline::pixel_order) - 1;
     constexpr int16_t full = (int16_t(1) << (16 - res_ord)) - 1;
@@ -186,20 +172,18 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
 
 void Polyline::fill_generic(const Point &orig, int x_ord, int y_ord, size_t offs, int winding)
 {
+    Line *buf = line.data() + offs;
+    size_t size = line.size() - offs;
+    scanbuf.resize(size);
+
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
     uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
+#define LINE(x, y)  case x | y << 8:  ::fill_generic<x, y>(ptr, -ptrdiff_t(stride), buf, size, winding, scanbuf.data());  return;
     switch(x_ord | y_ord << 8)
     {
-        case 0 | 0 << 8:  ::fill_generic<0, 0>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 1 | 0 << 8:  ::fill_generic<1, 0>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 1 | 1 << 8:  ::fill_generic<1, 1>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 2 | 1 << 8:  ::fill_generic<2, 1>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 2 | 2 << 8:  ::fill_generic<2, 2>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 3 | 2 << 8:  ::fill_generic<3, 2>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 3 | 3 << 8:  ::fill_generic<3, 3>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 4 | 3 << 8:  ::fill_generic<4, 3>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
-        case 4 | 4 << 8:  ::fill_generic<4, 4>(ptr, -ptrdiff_t(stride), line.data() + offs, line.size() - offs, winding);  return;
+        LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)
         default:  assert(false);
     }
+#undef LINE
 }

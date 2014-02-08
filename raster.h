@@ -16,7 +16,7 @@ class Polyline
 {
 public:
     static constexpr int pixel_order = 6;
-    static constexpr int tile_order = 6 + 3;  // 8x8 pixels
+    static constexpr int tile_order = 6 + 4;  // 16x16 pixels
     static constexpr int err = 16, e2 = err * err;
 
 
@@ -80,11 +80,19 @@ public:
         void split_vert(int32_t y, Line &next);
     };
 
+    struct ScanSegment
+    {
+        uint8_t weight;
+        uint16_t total;
+        int16_t a, b, c;
+    };
+
 
 private:
     int winding_mask;
     std::vector<Line> line;
     int32_t x_min, x_max, y_min, y_max;
+    std::vector<ScanSegment> scanbuf;
     std::vector<uint8_t> bitmap;
     size_t stride, size_y;
 
