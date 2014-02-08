@@ -90,7 +90,7 @@ public:
 
 private:
     int winding_mask;
-    std::vector<Line> line;
+    std::vector<Line> linebuf[3];
     int32_t x_min, x_max, y_min, y_max;
     std::vector<ScanSegment> scanbuf;
     std::vector<uint8_t> bitmap;
@@ -103,12 +103,12 @@ private:
 
     void fill_solid(const Point &orig, int x_ord, int y_ord, uint8_t value);
     void fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c);
-    void fill_generic(const Point &orig, int x_ord, int y_ord, size_t offs, int winding);
-    uint8_t calc_pixel(size_t offs, int winding);
+    void fill_generic(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding);
+    uint8_t calc_pixel(std::vector<Line> &line, size_t offs, int winding);
 
-    size_t split_horz(size_t offs, int &winding, int32_t x);
-    size_t split_vert(size_t offs, int &winding, int32_t y);
-    void rasterize(const Point &orig, int x_ord, int y_ord, size_t offs, int winding);
+    static int split_horz(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t x);
+    static int split_vert(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t y);
+    void rasterize(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding);
 
 public:
     bool create(const FT_Outline &path);

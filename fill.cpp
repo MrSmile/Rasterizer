@@ -170,10 +170,10 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     }
 }
 
-void Polyline::fill_generic(const Point &orig, int x_ord, int y_ord, size_t offs, int winding)
+void Polyline::fill_generic(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding)
 {
-    Line *buf = line.data() + offs;
-    size_t size = line.size() - offs;
+    Line *buf = linebuf[index].data() + offs;
+    size_t size = linebuf[index].size() - offs;
     scanbuf.resize(size);
 
     Point r = orig >> pixel_order;
