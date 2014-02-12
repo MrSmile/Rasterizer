@@ -9,6 +9,12 @@
 
 
 
+template<typename T> constexpr T absval(T value)
+{
+    return value < 0 ? -value : value;
+}
+
+
 void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t stride);
 
 
@@ -82,8 +88,8 @@ public:
 
     struct ScanSegment
     {
-        uint8_t weight;
-        uint16_t total;
+        uint8_t cur;
+        int16_t total;
         int16_t a, b, c;
     };
 

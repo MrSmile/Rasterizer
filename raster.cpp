@@ -10,14 +10,14 @@ using namespace std;
 
 
 
-Polyline::Segment::Segment(const Point &r_) : r(r_), r2(r_ * r_), er(int64_t(err) * max(abs(r_.x), abs(r_.y)))
+Polyline::Segment::Segment(const Point &r_) : r(r_), r2(r_ * r_), er(int64_t(err) * max(absval(r_.x), absval(r_.y)))
 {
 }
 
 bool Polyline::Segment::subdivide(const Point &p)
 {
     int64_t pdr = p * r, pcr = p % r;
-    return pdr < -er || pdr > r2 + er || abs(pcr) > er;
+    return pdr < -er || pdr > r2 + er || absval(pcr) > er;
 }
 
 Polyline::Line::Line(const Point &pt0, const Point &pt1)
@@ -224,7 +224,7 @@ void Polyline::Line::move_y(int32_t y)
 
 static int32_t div_floor(int64_t a, int32_t b)
 {
-    return (a < 0) == (b < 0) ? a / b : -(abs(a) + abs(b) - 1) / abs(b);
+    return (a < 0) == (b < 0) ? a / b : -(absval(a) + absval(b) - 1) / absval(b);
 }
 
 void Polyline::Line::split_horz(int32_t x, Line &next)
