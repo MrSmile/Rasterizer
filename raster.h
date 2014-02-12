@@ -14,6 +14,26 @@ template<typename T> constexpr T absval(T value)
     return value < 0 ? -value : value;
 }
 
+template<typename T> T rounded_shift(T value, int shift)
+{
+    return (value + (T(1) << (shift - 1))) >> shift;
+}
+
+inline int ilog2(unsigned n)
+{
+    return (std::numeric_limits<unsigned>::digits - 1) ^ __builtin_clz(n);
+}
+
+inline int ilog2(unsigned long n)
+{
+    return (std::numeric_limits<unsigned long>::digits - 1) ^ __builtin_clzl(n);
+}
+
+inline int ilog2(unsigned long long n)
+{
+    return (std::numeric_limits<unsigned long long>::digits - 1) ^ __builtin_clzll(n);
+}
+
 
 void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t stride);
 
@@ -42,9 +62,9 @@ public:
             f_up = 1, f_ur_dl = 2, f_exact_x = 4, f_exact_y = 8
         };
 
-        uint8_t flags;
+        uint8_t flags, order;
         int32_t x_min, x_max, y_min, y_max;
-        int32_t a, b;
+        int32_t a, b, scale;
         int64_t c;
 
         Line() = default;
@@ -84,6 +104,23 @@ public:
         void move_y(int32_t y);
         void split_horz(int32_t x, Line &next);
         void split_vert(int32_t y, Line &next);
+
+        int32_t a_norm(int shift = 0) const
+        {
+            return rounded_shift(int64_t(a) * scale, order + shift);
+        }
+
+        int32_t b_norm(int shift = 0) const
+        {
+            return rounded_shift(int64_t(b) * scale, order + shift);
+        }
+
+        int64_t c_norm(int shift = 0) const
+        {
+            int c_ord = ilog2(uint64_t(absval(c)));
+            int64_t cn = rounded_shift(c << (62 - c_ord), 32);
+            return rounded_shift(cn * scale, order + shift - c_ord + pixel_order + 30);
+        }
     };
 
     struct ScanSegment

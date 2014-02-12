@@ -26,27 +26,6 @@ inline constexpr int16x8_t int16x8(int16_t val)
 }
 
 
-inline int ilog2(unsigned n)
-{
-    return (std::numeric_limits<unsigned>::digits - 1) ^ __builtin_clz(n);
-}
-
-inline int ilog2(unsigned long n)
-{
-    return (std::numeric_limits<unsigned long>::digits - 1) ^ __builtin_clzl(n);
-}
-
-inline int ilog2(unsigned long long n)
-{
-    return (std::numeric_limits<unsigned long long>::digits - 1) ^ __builtin_clzll(n);
-}
-
-
-template<typename T> T rounded_shift(T value, int shift)
-{
-    return (value + (T(1) << (shift - 1))) >> shift;
-}
-
 inline int16_t limit(int16_t value, int16_t top)
 {
     return min(top, max(int16_t(0), value));
@@ -158,21 +137,8 @@ template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t 
     }
 }
 
-inline void normalize_halfplane(int32_t &a, int32_t &b, int64_t &c)
-{
-    uint32_t scale = max(absval(a), absval(b));
-    int order = ilog2(scale);  scale <<= 31 - order;
-    scale = (uint64_t(1) << 61) / scale;
-
-    a = rounded_shift(int64_t(a) * scale, order);
-    b = rounded_shift(int64_t(b) * scale, order);
-    int c_ord = ilog2(uint64_t(absval(c)));  c = rounded_shift(c << (62 - c_ord), 32);
-    c = rounded_shift(c * scale, order - c_ord + Polyline::pixel_order + 30);
-}
-
 void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c)
 {
-    normalize_halfplane(a, b, c);
     Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
     uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
@@ -278,11 +244,8 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         seg[pos].total = line[i].y_max - (dn << Polyline::pixel_order);
         assert(seg[pos].total - seg[pos].cur == line[i].y_max - line[i].y_min);
 
-        int32_t a = line[i].a, b = line[i].b;  int64_t c = line[i].c;
-        normalize_halfplane(a, b, c);  c -= b * int64_t(dn);
-        seg[pos].a = rounded_shift(a, res_ord + 14);
-        seg[pos].b = rounded_shift(b, res_ord + 14);
-        seg[pos].c = rounded_shift(2 * c - a, res_ord + 15);
+        seg[pos].a = line[i].a_norm(res_ord + 14);  seg[pos].b = line[i].b_norm(res_ord + 14);
+        seg[pos].c = line[i].c_norm(res_ord + 14) - (seg[pos].a >> 1) - seg[pos].b * dn;
     }
 
     int16_t cur = 256 * winding;  int beg = 0, end = 0;

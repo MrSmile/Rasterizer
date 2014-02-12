@@ -27,6 +27,10 @@ Polyline::Line::Line(const Point &pt0, const Point &pt1)
     x_min = min(pt0.x, pt1.x);  x_max = max(pt0.x, pt1.x);
     y_min = min(pt0.y, pt1.y);  y_max = max(pt0.y, pt1.y);
     a = r.y;  b = -r.x;  c = a * int64_t(pt0.x) + b * int64_t(pt0.y);
+
+    uint32_t max_ab = max(absval(a), absval(b));
+    order = ilog2(uint32_t(max_ab));  max_ab <<= 31 - order;
+    scale = (uint64_t(1) << 61) / max_ab;
 }
 
 bool Polyline::add_line(const Point &pt0, const Point &pt1)
@@ -229,43 +233,37 @@ static int32_t div_floor(int64_t a, int32_t b)
 
 void Polyline::Line::split_horz(int32_t x, Line &next)
 {
-    assert(x > x_min && x < x_max);
-    next.a = a;  next.b = b;  next.c = c - a * int64_t(x);
+    assert(x > x_min && x < x_max);  next = *this;  next.c -= a * int64_t(x);
     int32_t y = div_floor(next.c, b), y1 = y;  if(b * int64_t(y) != next.c)y1++;  // TODO: optimize out division
     assert(y <= next.c / double(b) && y1 >= next.c / double(b));
     assert(y >= y_min && y1 <= y_max);
 
-    next.x_min = 0;  next.x_max = x_max - x;  x_max = x;
+    next.x_min = 0;  next.x_max -= x;  x_max = x;  next.flags |= f_exact_x;
     if(flags & f_ur_dl)
     {
-        next.flags = flags & ~f_exact_y | f_exact_x;
-        next.y_min = y;  next.y_max = y_max;  y_max = y1;
+        next.y_min = y;  y_max = y1;  next.flags &= ~f_exact_y;
     }
     else
     {
-        next.flags = flags | f_exact_x;  flags &= ~f_exact_y;
-        next.y_min = y_min;  next.y_max = y1;  y_min = y;
+        y_min = y;  next.y_max = y1;  flags &= ~f_exact_y;
     }
 }
 
 void Polyline::Line::split_vert(int32_t y, Line &next)
 {
-    assert(y > y_min && y < y_max);
-    next.a = a;  next.b = b;  next.c = c - b * int64_t(y);
+    assert(y > y_min && y < y_max);  next = *this;  next.c -= b * int64_t(y);
     int32_t x = div_floor(next.c, a), x1 = x;  if(a * int64_t(x) != next.c)x1++;  // TODO: optimize out division
     assert(x <= next.c / double(a) && x1 >= next.c / double(a));
     assert(x >= x_min && x1 <= x_max);
 
-    next.y_min = 0;  next.y_max = y_max - y;  y_max = y;
+    next.y_min = 0;  next.y_max -= y;  y_max = y;  next.flags |= f_exact_y;
     if(flags & f_ur_dl)
     {
-        next.flags = flags & ~f_exact_x | f_exact_y;
-        next.x_min = x;  next.x_max = x_max;  x_max = x1;
+        next.x_min = x;  x_max = x1;  next.flags &= ~f_exact_x;
     }
     else
     {
-        next.flags = flags | f_exact_y;  flags &= ~f_exact_x;
-        next.x_min = x_min;  next.x_max = x1;  x_min = x;
+        x_min = x;  next.x_max = x1;  flags &= ~f_exact_x;
     }
 }
 
@@ -331,15 +329,19 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, siz
     {
         int flag = 0;
         if(line[offs].c < 0)winding++;
-        if(winding & winding_mask)flag |= 1;
-        if((winding - 1) & winding_mask)flag |= 2;
-        switch(flag)
+        if(winding & winding_mask)flag ^= 1;
+        if((winding - 1) & winding_mask)flag ^= 3;
+        if(flag & 1)
         {
-        case 0:  fill_solid(orig, x_ord, y_ord, false);  break;
-        case 1:  fill_halfplane(orig, x_ord, y_ord, line[offs].a, line[offs].b, line[offs].c);  break;
-        case 2:  fill_halfplane(orig, x_ord, y_ord, -line[offs].a, -line[offs].b, -line[offs].c);  break;
-        default:  fill_solid(orig, x_ord, y_ord, true);  break;
+            int32_t a = line[offs].a_norm(), b = line[offs].b_norm();
+            int64_t c = line[offs].c_norm();
+            if(flag & 2)
+            {
+                a = -a;  b = -b;  c = -c;
+            }
+            fill_halfplane(orig, x_ord, y_ord, a, b, c);
         }
+        else fill_solid(orig, x_ord, y_ord, flag & 2);
         line.pop_back();  return;
     }
     if(x_ord == tile_order && y_ord == tile_order)
