@@ -54,15 +54,15 @@ inline int16x8_t absval(int16x8_t value)
 }
 
 
-void fill_solid_line16(uint8_t *buf, ptrdiff_t stride, int32_t width, int32_t height, bool set)
+void fill_solid_line16(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set)
 {
     assert(!(reinterpret_cast<uintptr_t>(buf) & 15) && !(stride & 15));
     uint8x16_t *ptr = reinterpret_cast<uint8x16_t *>(__builtin_assume_aligned(buf, 16));
     stride >>= 4;
 
     uint8x16_t value = set ? uint8x16(255) : uint8x16(0);
-    for(int32_t j = 0; j < height; j++, ptr += stride)
-        for(int32_t i = 0; i < width; i++)ptr[i] = value;
+    for(int j = 0; j < height; j++, ptr += stride)
+        for(int i = 0; i < width; i++)ptr[i] = value;
 }
 
 template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, bool set)
@@ -77,23 +77,16 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
         for(int i = 0; i < 1 << x_ord; i++)buf[i] = value;
 }
 
-void Polyline::fill_solid(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, bool set)
+void Polyline::fill_solid(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set)
 {
-    x_ord -= pixel_order;  y_ord -= pixel_order;
-#define LINE(x, y)  case x | y << 8:  ::fill_solid<x, y>(buf, stride, set);  return;
-    switch(x_ord | y_ord << 8)
-    {
-        LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)
-        default:  break;
-    }
-#undef LINE
-    fill_solid_line16(buf, stride, int32_t(1) << (x_ord - 4), int32_t(1) << y_ord, set);
+    assert(width > 0 && !(width & 15) && height > 0);
+    fill_solid_line16(buf, stride, width >> 4, height, set);
 
     /*
     uint8_t value = set ? 255 : 0;
     uint8_t *ptr = reinterpret_cast<uint8_t *>(__builtin_assume_aligned(buf, 16));
-    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr += stride)
-        for(int32_t i = 0; i < int32_t(1) << x_ord; i++)ptr[i] = value;
+    for(int j = 0; j < height; j++, ptr += stride)
+        for(int i = 0; i < width; i++)ptr[i] = value;
     */
 }
 
@@ -135,27 +128,23 @@ template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t 
     }
 }
 
-void Polyline::fill_halfplane(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c)
+void Polyline::fill_halfplane(uint8_t *buf, ptrdiff_t stride, int width, int height, int32_t a, int32_t b, int64_t c)
 {
-    x_ord -= pixel_order;  y_ord -= pixel_order;
-#define LINE(x, y)  case x | y << 8:  ::fill_halfplane<x, y>(buf, stride, a, b, c);  return;
-    switch(x_ord | y_ord << 8)
+    assert(width > 0 && !(width & tile_mask) && height > 0 && !(height & tile_mask));
+    if(width == tile_mask + 1 && height == tile_mask + 1)
     {
-        LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)
-        default:  break;
+        ::fill_halfplane<tile_order, tile_order>(buf, stride, a, b, c);  return;
     }
-#undef LINE
 
-    constexpr int n = 4;
-    int64_t offs = (int64_t(a) + int64_t(b)) << (n - 1);
-    int64_t size = int64_t(uint32_t(absval(a)) + uint32_t(absval(b))) << (n - 1);
-    const ptrdiff_t step = 1 << n;  x_ord -= n;  y_ord -= n;
-    for(int j = 0; j < 1 << y_ord; j++, buf += step * stride)
-        for(int i = 0; i < 1 << x_ord; i++)
+    int64_t offs = (int64_t(a) + int64_t(b)) << (tile_order - 1);
+    int64_t size = int64_t(uint32_t(absval(a)) + uint32_t(absval(b))) << (tile_order - 1);
+    const ptrdiff_t step = 1 << tile_order;  width >>= tile_order;  height >>= tile_order;
+    for(int j = 0; j < height; j++, buf += step * stride)
+        for(int i = 0; i < width; i++)
         {
             int64_t cc = c - a * int64_t(step * i) - b * int64_t(step * j);
-            if(absval(offs - cc) < size)::fill_halfplane<n, n>(buf + i * step, stride, a, b, cc);
-            else ::fill_solid<n, n>(buf + i * step, stride, offs < cc);
+            if(absval(offs - cc) < size)::fill_halfplane<tile_order, tile_order>(buf + i * step, stride, a, b, cc);
+            else ::fill_solid<tile_order, tile_order>(buf + i * step, stride, offs < cc);
         }
 }
 
@@ -260,18 +249,11 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     }
 }
 
-void Polyline::fill_generic(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int index, size_t offs, int winding)
+void Polyline::fill_generic(uint8_t *buf, ptrdiff_t stride,
+    int width, int height, const Line *line, size_t size, int winding)
 {
-    Line *line = linebuf[index].data() + offs;
-    size_t size = linebuf[index].size() - offs;
-    scanbuf.resize(size);
+    assert(width == tile_mask + 1 && height == tile_mask + 1);
 
-    x_ord -= pixel_order;  y_ord -= pixel_order;
-#define LINE(x, y)  case x | y << 8:  ::fill_generic<x, y>(buf, stride, line, size, winding, scanbuf.data());  return;
-    switch(x_ord | y_ord << 8)
-    {
-        LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)
-        default:  assert(false);
-    }
-#undef LINE
+    scanbuf.resize(size);
+    ::fill_generic<tile_order, tile_order>(buf, stride, line, size, winding, scanbuf.data());
 }

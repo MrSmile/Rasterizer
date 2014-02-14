@@ -41,8 +41,8 @@ void print_bitmap(const uint8_t *image, size_t width, size_t height, ptrdiff_t s
 class Polyline
 {
 public:
-    static constexpr int pixel_order = 6;
-    static constexpr int tile_order = 6 + 4;  // 16x16 pixels
+    static constexpr int pixel_order = 6, tile_order = 4;  // 16x16 pixels
+    static constexpr int tile_mask = (uint32_t(1) << tile_order) - 1;
     static constexpr int err = 16, e2 = err * err;
 
 
@@ -142,14 +142,14 @@ private:
     bool add_quadratic(const Point &pt0, const Point &pt1, const Point &pt2);
     bool add_cubic(const Point &pt0, const Point &pt1, const Point &pt2, const Point &pt3);
 
-    void fill_solid(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, bool set);
-    void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c);
-    void fill_generic(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int index, size_t offs, int winding);
+    void fill_solid(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set);
+    void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int width, int height, int32_t a, int32_t b, int64_t c);
+    void fill_generic(uint8_t *buf, ptrdiff_t stride, int width, int height, const Line *line, size_t size, int winding);
     uint8_t calc_pixel(std::vector<Line> &line, size_t offs, int winding);
 
     static int split_horz(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t x);
     static int split_vert(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t y);
-    void rasterize(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int index, size_t offs, int winding);
+    void rasterize(uint8_t *buf, ptrdiff_t stride, int width, int height, int index, size_t offs, int winding);
 
 public:
     bool create(const FT_Outline &path);
