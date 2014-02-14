@@ -22,7 +22,8 @@ bool Polyline::Segment::subdivide(const Point &p)
 
 Polyline::Line::Line(const Point &pt0, const Point &pt1)
 {
-    Point r = pt1 - pt0;  flags = f_exact_x | f_exact_y;
+    Point r = pt1 - pt0;
+    flags = f_exact_l | f_exact_r | f_exact_d | f_exact_u;
     if(r.x < 0)flags ^= f_ur_dl;  if(r.y >= 0)flags ^= f_up | f_ur_dl;
     x_min = min(pt0.x, pt1.x);  x_max = max(pt0.x, pt1.x);
     y_min = min(pt0.y, pt1.y);  y_max = max(pt0.y, pt1.y);
@@ -215,55 +216,36 @@ uint8_t Polyline::calc_pixel(std::vector<Line> &line, size_t offs, int winding)
 
 void Polyline::Line::move_x(int32_t x)
 {
-    x_min -= x;  x_max -= x;  c -= a * int64_t(x);
-    if(is_split_x() && is_ur_dl())flags &= ~f_exact_y;
+    x_min = max<int32_t>(0, x_min - x);  x_max -= x;  c -= a * int64_t(x);
+    if(is_split_x() && is_ur_dl())flags &= ~f_exact_d;
 }
 
 void Polyline::Line::move_y(int32_t y)
 {
-    y_min -= y;  y_max -= y;  c -= b * int64_t(y);
-    if(is_split_y() && is_ur_dl())flags &= ~f_exact_x;
-}
-
-static int32_t div_floor(int64_t a, int32_t b)
-{
-    return (a < 0) == (b < 0) ? a / b : -(absval(a) + absval(b) - 1) / absval(b);
+    y_min = max<int32_t>(0, y_min - y);  y_max -= y;  c -= b * int64_t(y);
+    if(is_split_y() && is_ur_dl())flags &= ~f_exact_l;
 }
 
 void Polyline::Line::split_horz(int32_t x, Line &next)
 {
-    assert(x > x_min && x < x_max);  next = *this;  next.c -= a * int64_t(x);
-    int32_t y = div_floor(next.c, b), y1 = y;  if(b * int64_t(y) != next.c)y1++;  // TODO: optimize out division
-    assert(y <= next.c / double(b) && y1 >= next.c / double(b));
-    assert(y >= y_min && y1 <= y_max);
+    assert(x > x_min && x < x_max);
+    next = *this;  next.c -= a * int64_t(x);
+    next.x_min = 0;  next.x_max -= x;  x_max = x;
 
-    next.x_min = 0;  next.x_max -= x;  x_max = x;  next.flags |= f_exact_x;
-    if(flags & f_ur_dl)
-    {
-        next.y_min = y;  y_max = y1;  next.flags &= ~f_exact_y;
-    }
-    else
-    {
-        y_min = y;  next.y_max = y1;  flags &= ~f_exact_y;
-    }
+    flags &= ~f_exact_d;  next.flags &= ~f_exact_u;
+    if(flags & f_ur_dl)swap(flags, next.flags);
+    flags |= f_exact_r;  next.flags |= f_exact_l;
 }
 
 void Polyline::Line::split_vert(int32_t y, Line &next)
 {
-    assert(y > y_min && y < y_max);  next = *this;  next.c -= b * int64_t(y);
-    int32_t x = div_floor(next.c, a), x1 = x;  if(a * int64_t(x) != next.c)x1++;  // TODO: optimize out division
-    assert(x <= next.c / double(a) && x1 >= next.c / double(a));
-    assert(x >= x_min && x1 <= x_max);
+    assert(y > y_min && y < y_max);
+    next = *this;  next.c -= b * int64_t(y);
+    next.y_min = 0;  next.y_max -= y;  y_max = y;
 
-    next.y_min = 0;  next.y_max -= y;  y_max = y;  next.flags |= f_exact_y;
-    if(flags & f_ur_dl)
-    {
-        next.x_min = x;  x_max = x1;  next.flags &= ~f_exact_x;
-    }
-    else
-    {
-        x_min = x;  next.x_max = x1;  flags &= ~f_exact_x;
-    }
+    flags &= ~f_exact_l;  next.flags &= ~f_exact_r;
+    if(flags & f_ur_dl)swap(flags, next.flags);
+    flags |= f_exact_u;  next.flags |= f_exact_d;
 }
 
 int Polyline::split_horz(const vector<Line> &src, size_t offs, vector<Line> &dst0, vector<Line> &dst1, int32_t x)
@@ -272,20 +254,18 @@ int Polyline::split_horz(const vector<Line> &src, size_t offs, vector<Line> &dst
     for(size_t i = offs; i < src.size(); i++)
     {
         int delta = src[i].delta_horz();
-        if(src[i].x_max <= x)
+        if(src[i].check_r(x))
         {
-            winding += delta;  if(src[i].x_min < x)dst0.push_back(src[i]);
+            winding += delta;  if(src[i].x_min >= x)continue;  dst0.push_back(src[i]);
+            dst0.rbegin()->x_max = min(x, dst0.rbegin()->x_max);  continue;
         }
-        else if(src[i].x_min < x)
+        if(src[i].check_l(x))
         {
-            if(src[i].is_ur_dl())winding += delta;
-            dst0.push_back(src[i]);  dst1.push_back(Line());
-            dst0.rbegin()->split_horz(x, *dst1.rbegin());
+            dst1.push_back(src[i]);  dst1.rbegin()->move_x(x);  continue;
         }
-        else
-        {
-            dst1.push_back(src[i]);  dst1.rbegin()->move_x(x);
-        }
+        if(src[i].is_ur_dl())winding += delta;
+        dst0.push_back(src[i]);  dst1.push_back(Line());
+        dst0.rbegin()->split_horz(x, *dst1.rbegin());
     }
     return winding;
 }
@@ -296,20 +276,18 @@ int Polyline::split_vert(const vector<Line> &src, size_t offs, vector<Line> &dst
     for(size_t i = offs; i < src.size(); i++)
     {
         int delta = src[i].delta_vert();
-        if(src[i].y_max <= y)
+        if(src[i].check_u(y))
         {
-            winding += delta;  if(src[i].y_min < y)dst0.push_back(src[i]);
+            winding += delta;  if(src[i].y_min >= y)continue;  dst0.push_back(src[i]);
+            dst0.rbegin()->y_max = min(y, dst0.rbegin()->y_max);  continue;
         }
-        else if(src[i].y_min < y)
+        if(src[i].check_d(y))
         {
-            if(src[i].is_ur_dl())winding += delta;
-            dst0.push_back(src[i]);  dst1.push_back(Line());
-            dst0.rbegin()->split_vert(y, *dst1.rbegin());
+            dst1.push_back(src[i]);  dst1.rbegin()->move_y(y);  continue;
         }
-        else
-        {
-            dst1.push_back(src[i]);  dst1.rbegin()->move_y(y);
-        }
+        if(src[i].is_ur_dl())winding += delta;
+        dst0.push_back(src[i]);  dst1.push_back(Line());
+        dst0.rbegin()->split_vert(y, *dst1.rbegin());
     }
     return winding;
 }

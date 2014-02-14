@@ -193,13 +193,45 @@ template<> void fill_line<4, 4, 6>(uint8_t *buf, int16_t base, Polyline::ScanSeg
 
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_generic(uint8_t *buf, ptrdiff_t stride,
-        const Polyline::Line *line, size_t n_lines, int winding, Polyline::ScanSegment *seg)
+        Polyline::Line *line, size_t n_lines, int winding, Polyline::ScanSegment *seg)
 {
     static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
 
     size_t count[1 << y_ord];  memset(count, 0, sizeof(count));
     for(size_t i = 0; i < n_lines; i++)
     {
+        if(!(line[i].flags & Polyline::Line::f_exact_d))
+        {
+            int64_t c = line[i].c - line[i].a * int64_t(line[i].is_ur_dl() ? line[i].x_min : line[i].x_max);
+            int64_t dc = -int64_t(line[i].b) << (Polyline::pixel_order + y_ord - 1);  int pos = 0;
+            if(dc < 0)
+            {
+                c = -c;  dc = -dc;
+            }
+            for(int k = 1 << (y_ord - 1); k; k >>= 1, dc >>= 1)
+                if(c + dc <= 0)
+                {
+                    pos += k;  c += dc;
+                }
+            line[i].y_min = int32_t(pos) << Polyline::pixel_order;
+        }
+        if(!(line[i].flags & Polyline::Line::f_exact_u))
+        {
+            int64_t c = line[i].c - line[i].a * int64_t(line[i].is_ur_dl() ? line[i].x_max : line[i].x_min);
+            int64_t dc = -int64_t(line[i].b) << (Polyline::pixel_order + y_ord - 1);  int pos = 0;
+            if(dc < 0)
+            {
+                c = -c;  dc = -dc;
+            }
+            for(int k = 1 << (y_ord - 1); k; k >>= 1, dc >>= 1)
+                if(c + dc < 0)
+                {
+                    pos += k;  c += dc;
+                }
+            line[i].y_max = int32_t(pos + 1) << Polyline::pixel_order;
+        }
+        assert(line[i].y_min <= line[i].y_max);
+
         assert(line[i].y_min >= 0 && line[i].y_min < int32_t(1) << (y_ord + Polyline::pixel_order));
         assert(line[i].y_max > 0 && line[i].y_max <= int32_t(1) << (y_ord + Polyline::pixel_order));
         if(line[i].y_min < line[i].y_max)count[line[i].y_min >> Polyline::pixel_order]++;
@@ -249,7 +281,7 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     }
 }
 
-void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, const Line *line, size_t size, int winding)
+void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, Line *line, size_t size, int winding)
 {
     assert(width == tile_mask + 1 && height == tile_mask + 1);
 
