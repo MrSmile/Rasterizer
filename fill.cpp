@@ -77,24 +77,22 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
         for(int i = 0; i < 1 << x_ord; i++)buf[i] = value;
 }
 
-void Polyline::fill_solid(const Point &orig, int x_ord, int y_ord, bool set)
+void Polyline::fill_solid(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, bool set)
 {
-    Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
-#define LINE(x, y)  case x | y << 8:  ::fill_solid<x, y>(ptr, -ptrdiff_t(stride), set);  return;
+#define LINE(x, y)  case x | y << 8:  ::fill_solid<x, y>(buf, stride, set);  return;
     switch(x_ord | y_ord << 8)
     {
         LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)
         default:  break;
     }
 #undef LINE
-    fill_solid_line16(ptr, -ptrdiff_t(stride), int32_t(1) << (x_ord - 4), int32_t(1) << y_ord, set);
+    fill_solid_line16(buf, stride, int32_t(1) << (x_ord - 4), int32_t(1) << y_ord, set);
 
     /*
     uint8_t value = set ? 255 : 0;
-    ptr = reinterpret_cast<uint8_t *>(__builtin_assume_aligned(ptr, 16));
-    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr -= stride)
+    uint8_t *ptr = reinterpret_cast<uint8_t *>(__builtin_assume_aligned(buf, 16));
+    for(int32_t j = 0; j < int32_t(1) << y_ord; j++, ptr += stride)
         for(int32_t i = 0; i < int32_t(1) << x_ord; i++)ptr[i] = value;
     */
 }
@@ -137,12 +135,10 @@ template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t 
     }
 }
 
-void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c)
+void Polyline::fill_halfplane(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int32_t a, int32_t b, int64_t c)
 {
-    Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
-#define LINE(x, y)  case x | y << 8:  ::fill_halfplane<x, y>(ptr, -ptrdiff_t(stride), a, b, c);  return;
+#define LINE(x, y)  case x | y << 8:  ::fill_halfplane<x, y>(buf, stride, a, b, c);  return;
     switch(x_ord | y_ord << 8)
     {
         LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)
@@ -154,13 +150,12 @@ void Polyline::fill_halfplane(const Point &orig, int x_ord, int y_ord, int32_t a
     int64_t offs = (int64_t(a) + int64_t(b)) << (n - 1);
     int64_t size = int64_t(uint32_t(absval(a)) + uint32_t(absval(b))) << (n - 1);
     const ptrdiff_t step = 1 << n;  x_ord -= n;  y_ord -= n;
-    for(int j = 0; j < 1 << y_ord; j++, ptr -= step * stride)
+    for(int j = 0; j < 1 << y_ord; j++, buf += step * stride)
         for(int i = 0; i < 1 << x_ord; i++)
         {
             int64_t cc = c - a * int64_t(step * i) - b * int64_t(step * j);
-            if(absval(offs - cc) < size)
-                ::fill_halfplane<n, n>(ptr + i * step, -ptrdiff_t(stride), a, b, cc);
-            else ::fill_solid<n, n>(ptr + i * step, -ptrdiff_t(stride), offs < cc);
+            if(absval(offs - cc) < size)::fill_halfplane<n, n>(buf + i * step, stride, a, b, cc);
+            else ::fill_solid<n, n>(buf + i * step, stride, offs < cc);
         }
 }
 
@@ -265,16 +260,14 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     }
 }
 
-void Polyline::fill_generic(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding)
+void Polyline::fill_generic(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int index, size_t offs, int winding)
 {
-    Line *buf = linebuf[index].data() + offs;
+    Line *line = linebuf[index].data() + offs;
     size_t size = linebuf[index].size() - offs;
     scanbuf.resize(size);
 
-    Point r = orig >> pixel_order;
     x_ord -= pixel_order;  y_ord -= pixel_order;
-    uint8_t *ptr = bitmap.data() + r.x + (size_y - r.y - 1) * stride;
-#define LINE(x, y)  case x | y << 8:  ::fill_generic<x, y>(ptr, -ptrdiff_t(stride), buf, size, winding, scanbuf.data());  return;
+#define LINE(x, y)  case x | y << 8:  ::fill_generic<x, y>(buf, stride, line, size, winding, scanbuf.data());  return;
     switch(x_ord | y_ord << 8)
     {
         LINE(0, 0)  LINE(1, 0)  LINE(1, 1)  LINE(2, 1)  LINE(2, 2)  LINE(3, 2)  LINE(3, 3)  LINE(4, 3)  LINE(4, 4)

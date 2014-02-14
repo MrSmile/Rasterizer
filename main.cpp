@@ -3,6 +3,7 @@
 
 
 #include "raster.h"
+#include <pnglite.h>
 #include <iostream>
 #include FT_OUTLINE_H
 #include <ctime>
@@ -31,49 +32,59 @@ void print_outline(const FT_Outline &path)
     cout << endl;
 }
 
-void compare_results(FT_Library lib, FT_Outline &outline, int width, int height)
+bool write_image(const char *file, const uint8_t *img, unsigned width, unsigned height)
 {
-    cout << "-----------------------------------------" << endl;
+    png_t png;
+    if(png_open_file_write(&png, file))return false;
+    bool res = !png_set_data(&png, width, height, 8, PNG_GREYSCALE, const_cast<unsigned char *>(img));
+    return !png_close_file(&png) && res;
+}
 
-    Polyline poly;  poly.create(outline);
-    poly.rasterize(0, 0, width, height);  poly.print();
-    const uint8_t *cmp = poly.image();
+void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
+{
+    ptrdiff_t stride = width * n_outlines;
+    vector<uint8_t> image(3 * height * stride);
 
-    cout << "-----------------------------------------" << endl;
+    Polyline poly;
+    uint8_t *buf = image.data() + (height - 1) * stride;
+    for(size_t i = 0; i < n_outlines; i++, buf += width)
+    {
+        poly.create(outline[i]);
+        poly.rasterize(buf, -stride, 0, 0, width, height);
+    }
 
-    FT_Bitmap bm;  bm.rows = poly.height();  bm.width = bm.pitch = poly.width();
-    vector<uint8_t> image(bm.rows * bm.pitch);  bm.buffer = image.data();
+    FT_Bitmap bm;  bm.rows = height;  bm.width = width;
+    bm.pitch = stride;  bm.buffer = image.data() + height * stride;
     bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
-    FT_Outline_Get_Bitmap(lib, &outline, &bm);
+    for(size_t i = 0; i < n_outlines; i++, bm.buffer += width)
+        FT_Outline_Get_Bitmap(lib, &outline[i], &bm);
 
-    print_bitmap(bm.buffer, bm.width, bm.rows, bm.pitch);
+    uint8_t *src1 = image.data() + 0 * height * stride;
+    uint8_t *src2 = image.data() + 1 * height * stride;
+    uint8_t *dst  = image.data() + 2 * height * stride;
+    for(int i = 0; i < height * stride; i++)
+        dst[i] = 127 + 4 * (src1[i] - src2[i]);
 
-    cout << "-----------------------------------------" << endl;
-
-    for(int k = 0; k < bm.rows * bm.pitch; k++)
-        bm.buffer[k] = 8 * abs(bm.buffer[k] - cmp[k]);
-
-    print_bitmap(bm.buffer, bm.width, bm.rows, bm.pitch);
-
-    cout << "-----------------------------------------" << endl;
+    write_image("output.png", image.data(), stride, 3 * height);
 }
 
 void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height, int repeat)
 {
+    vector<uint8_t> image(width * height);
+
     clock_t tm0 = clock();
 
     Polyline poly;
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         poly.create(outline[i]);
-        poly.rasterize(0, 0, width, height);
+        poly.rasterize(image.data() + (height - 1) * width, -width, 0, 0, width, height);
     }
 
     clock_t tm1 = clock();
 
     FT_Bitmap bm;  bm.rows = height;  bm.width = bm.pitch = width;
-    vector<uint8_t> image(bm.rows * bm.pitch);  bm.buffer = image.data();
-    bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
+    bm.buffer = image.data();  bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
 
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
         FT_Outline_Get_Bitmap(lib, &outline[i], &bm);
@@ -89,6 +100,10 @@ int main()
 {
     //Polyline().test();  return 0;
 
+    if(png_init(0, 0))
+    {
+        cerr << "pnglite init failed!" << endl;  return -1;
+    }
 
     FT_Library lib;
     if(FT_Init_FreeType(&lib))
@@ -111,16 +126,6 @@ int main()
         FT_Done_Face(face);  FT_Done_FreeType(lib);  return -1;
     }
 
-
-    if(FT_Load_Char(face, 'B', FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) ||
-        face->glyph->format != FT_GLYPH_FORMAT_OUTLINE)
-    {
-        cerr << "Cannot load char!" << endl;
-        FT_Done_Face(face);  FT_Done_FreeType(lib);  return -1;
-    }
-    compare_results(lib, face->glyph->outline, size, size);
-
-
     const int n = 26;
     FT_Outline outline[n];
     for(int i = 0; i < n; i++)
@@ -132,10 +137,9 @@ int main()
             cerr << "Cannot load char!" << endl;  exit(-1);
         }
 
+    compare_results(lib, outline, n, size, size);
     benchmark(lib, outline, n, size, size, 9999);
 
     for(int i = 0; i < n; i++)FT_Outline_Done(lib, &outline[i]);
-
-
     FT_Done_Face(face);  FT_Done_FreeType(lib);  return 0;
 }

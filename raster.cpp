@@ -315,15 +315,14 @@ int Polyline::split_vert(const vector<Line> &src, size_t offs, vector<Line> &dst
     return winding;
 }
 
-void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, size_t offs, int winding)
+void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int x_ord, int y_ord, int index, size_t offs, int winding)
 {
     assert(x_ord >= tile_order && y_ord >= tile_order && unsigned(index) < 3);
-    assert(!(orig.x & ((int32_t(1) << x_ord) - 1)) && !(orig.y & ((int32_t(1) << y_ord) - 1)));
 
     vector<Line> &line = linebuf[index];
     if(line.size() == offs)
     {
-        fill_solid(orig, x_ord, y_ord, winding & winding_mask);  return;
+        fill_solid(buf, stride, x_ord, y_ord, winding & winding_mask);  return;
     }
     if(line.size() == offs + 1)
     {
@@ -339,14 +338,14 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, siz
             {
                 a = -a;  b = -b;  c = -c;
             }
-            fill_halfplane(orig, x_ord, y_ord, a, b, c);
+            fill_halfplane(buf, stride, x_ord, y_ord, a, b, c);
         }
-        else fill_solid(orig, x_ord, y_ord, flag & 2);
+        else fill_solid(buf, stride, x_ord, y_ord, flag & 2);
         line.pop_back();  return;
     }
     if(x_ord == tile_order && y_ord == tile_order)
     {
-        fill_generic(orig, x_ord, y_ord, index, offs, winding);  line.resize(offs);  return;
+        fill_generic(buf, stride, x_ord, y_ord, index, offs, winding);  line.resize(offs);  return;
     }
 
     int dst0 = index == 2 ? 0 : index + 1;
@@ -354,45 +353,44 @@ void Polyline::rasterize(const Point &orig, int x_ord, int y_ord, int index, siz
     size_t offs0 = linebuf[dst0].size(), offs1 = linebuf[dst1].size();
     linebuf[dst0].reserve(offs0 + line.size() - offs);
     linebuf[dst1].reserve(offs1 + line.size() - offs);
-    int winding1 = winding;  Point orig1 = orig;
+    int winding1 = winding;  uint8_t *buf1 = buf;
     if(x_ord > y_ord)
     {
-        int32_t x = int32_t(1) << --x_ord;  orig1.x += x;
+        int32_t x = int32_t(1) << --x_ord;  buf1 += x >> pixel_order;
         winding1 += split_horz(line, offs, linebuf[dst0], linebuf[dst1], x);
     }
     else
     {
-        int32_t y = int32_t(1) << --y_ord;  orig1.y += y;
+        int32_t y = int32_t(1) << --y_ord;  buf1 += (y >> pixel_order) * stride;
         winding1 += split_vert(line, offs, linebuf[dst0], linebuf[dst1], y);
     }
     line.resize(offs);
 
-    rasterize(orig,  x_ord, y_ord, dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
-    rasterize(orig1, x_ord, y_ord, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
+    rasterize(buf,  stride, x_ord, y_ord, dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
+    rasterize(buf1, stride, x_ord, y_ord, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
 }
 
-void Polyline::rasterize(int x0, int y0, int width, int height)
+void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int x0, int y0, int width, int height)
 {
-    Point orig(x0, y0);  orig <<= pixel_order;
+    x0 <<= pixel_order;  y0 <<= pixel_order;
     width <<= pixel_order;  height <<= pixel_order;
+    assert(width >= tile_order && height >= tile_order);
+    assert(!(width & (width - 1)) && !(height & (height - 1)));
 
     vector<Line> &line = linebuf[0];  assert(line.size());
     for(size_t i = 0; i < line.size(); i++)
     {
-        line[i].x_min -= orig.x;  line[i].x_max -= orig.x;
-        line[i].y_min -= orig.y;  line[i].y_max -= orig.y;
-        line[i].c -= line[i].a * int64_t(orig.x) + line[i].b * int64_t(orig.y);
+        line[i].x_min -= x0;  line[i].x_max -= x0;
+        line[i].y_min -= y0;  line[i].y_max -= y0;
+        line[i].c -= line[i].a * int64_t(x0) + line[i].b * int64_t(y0);
     }
-    x_min -= orig.x;  x_max -= orig.x;
-    y_min -= orig.y;  y_max -= orig.y;
+    x_min -= x0;  x_max -= x0;
+    y_min -= y0;  y_max -= y0;
 
     int x_ord = tile_order, y_ord = tile_order;
     while(int32_t(1) << x_ord < width)x_ord++;
     while(int32_t(1) << y_ord < height)y_ord++;
-
-    stride = size_t(1) << (x_ord - pixel_order);
-    size_y = size_t(1) << (y_ord - pixel_order);
-    bitmap.resize(stride * size_y);
+    assert(width == 1 << x_ord && height == 1 << y_ord);
 
     int src = 0, dst0 = 1, dst1 = 2, winding = 0;
     assert(!linebuf[dst0].size() && !linebuf[dst1].size());
@@ -416,7 +414,7 @@ void Polyline::rasterize(int x0, int y0, int width, int height)
         winding = split_vert(linebuf[src], 0, linebuf[dst0], linebuf[dst1], 0);
         linebuf[src].clear();  linebuf[dst0].clear();  swap(src, dst1);
     }
-    rasterize(Point(0, 0), x_ord, y_ord, src, 0, winding);
+    rasterize(buf, stride, x_ord, y_ord, src, 0, winding);
 }
 
 
@@ -457,5 +455,8 @@ void Polyline::test()
     for(size_t i = 1; i < n; i++)add_line(pt[i - 1], pt[i]);
     add_line(pt[n - 1], pt[0]);
 
-    rasterize(0, 0, 64, 64);  print();
+    const int w = 64, h = 64;
+    uint8_t bitmap[w * h] alignas(16);
+    rasterize(bitmap + (h - 1) * w, -w, 0, 0, w, h);
+    print_bitmap(bitmap, w, h, w);
 }
