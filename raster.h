@@ -132,7 +132,6 @@ public:
 
 
 private:
-    int winding_mask;
     std::vector<Line> linebuf[3];
     int32_t x_min, x_max, y_min, y_max;
     std::vector<ScanSegment> scanbuf;
@@ -142,18 +141,18 @@ private:
     bool add_quadratic(const Point &pt0, const Point &pt1, const Point &pt2);
     bool add_cubic(const Point &pt0, const Point &pt1, const Point &pt2, const Point &pt3);
 
-    void fill_solid(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set);
-    void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int width, int height, int32_t a, int32_t b, int64_t c);
-    void fill_generic(uint8_t *buf, ptrdiff_t stride, int width, int height, const Line *line, size_t size, int winding);
+    void fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set);
+    void fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c);
+    void fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, const Line *line, size_t size, int winding);
     uint8_t calc_pixel(std::vector<Line> &line, size_t offs, int winding);
 
     static int split_horz(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t x);
     static int split_vert(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t y);
-    void rasterize(uint8_t *buf, ptrdiff_t stride, int width, int height, int index, size_t offs, int winding);
+    void rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding);
 
 public:
     bool create(const FT_Outline &path);
-    void rasterize(uint8_t *buf, ptrdiff_t stride, int x0, int y0, int width, int height);
+    void rasterize(uint8_t *buf, int x0, int y0, int width, int height, ptrdiff_t stride, bool vert_flip = true);
 
 
     void test();  // DEBUG

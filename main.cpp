@@ -45,12 +45,11 @@ void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int
     ptrdiff_t stride = width * n_outlines;
     vector<uint8_t> image(3 * height * stride);
 
-    Polyline poly;
-    uint8_t *buf = image.data() + (height - 1) * stride;
+    Polyline poly;  uint8_t *buf = image.data();
     for(size_t i = 0; i < n_outlines; i++, buf += width)
     {
         poly.create(outline[i]);
-        poly.rasterize(buf, -stride, 0, 0, width, height);
+        poly.rasterize(buf, 0, 0, width, height, stride);
     }
 
     FT_Bitmap bm;  bm.rows = height;  bm.width = width;
@@ -78,7 +77,7 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         poly.create(outline[i]);
-        poly.rasterize(image.data() + (height - 1) * width, -width, 0, 0, width, height);
+        poly.rasterize(image.data(), 0, 0, width, height, width);
     }
 
     clock_t tm1 = clock();

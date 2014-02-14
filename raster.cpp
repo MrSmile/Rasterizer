@@ -62,7 +62,6 @@ bool Polyline::add_cubic(const Point &pt0, const Point &pt1, const Point &pt2, c
 
 bool Polyline::create(const FT_Outline &path)
 {
-    winding_mask = path.flags & FT_OUTLINE_EVEN_ODD_FILL ? 1 : -1;
     x_min = y_min = numeric_limits<int32_t>::max();
     x_max = y_max = numeric_limits<int32_t>::min();
     linebuf[0].clear();
@@ -209,7 +208,7 @@ uint8_t Polyline::calc_pixel(std::vector<Line> &line, size_t offs, int winding)
     }
 
     int res = 0;
-    for(size_t k = 0; k < n; k++)if(wnd[k] & winding_mask)res++;
+    for(size_t k = 0; k < n; k++)if(wnd[k])res++;
     return (255 * res + n / 2) / n;
 }
 
@@ -315,21 +314,19 @@ int Polyline::split_vert(const vector<Line> &src, size_t offs, vector<Line> &dst
     return winding;
 }
 
-void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int width, int height, int index, size_t offs, int winding)
+void Polyline::rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding)
 {
     assert(width > 0 && !(width & tile_mask) && height > 0 && !(height & tile_mask) && unsigned(index) < 3);
 
     vector<Line> &line = linebuf[index];
     if(line.size() == offs)
     {
-        fill_solid(buf, stride, width, height, winding & winding_mask);  return;
+        fill_solid(buf, width, height, stride, winding);  return;
     }
     if(line.size() == offs + 1)
     {
-        int flag = 0;
-        if(line[offs].c < 0)winding++;
-        if(winding & winding_mask)flag ^= 1;
-        if((winding - 1) & winding_mask)flag ^= 3;
+        int flag = 0;  if(line[offs].c < 0)winding++;
+        if(winding)flag ^= 1;  if(winding - 1)flag ^= 3;
         if(flag & 1)
         {
             int32_t a = line[offs].a_norm(), b = line[offs].b_norm();
@@ -338,14 +335,14 @@ void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int width, int height, 
             {
                 a = -a;  b = -b;  c = -c;
             }
-            fill_halfplane(buf, stride, width, height, a, b, c);
+            fill_halfplane(buf, width, height, stride, a, b, c);
         }
-        else fill_solid(buf, stride, width, height, flag & 2);
+        else fill_solid(buf, width, height, stride, flag & 2);
         line.pop_back();  return;
     }
     if(width == tile_mask + 1 && height == tile_mask + 1)
     {
-        fill_generic(buf, stride, width, height, line.data() + offs, line.size() - offs, winding);
+        fill_generic(buf, width, height, stride, line.data() + offs, line.size() - offs, winding);
         line.resize(offs);  return;
     }
 
@@ -368,14 +365,19 @@ void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int width, int height, 
     }
     line.resize(offs);
 
-    rasterize(buf,  stride, width,  height,  dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
-    rasterize(buf1, stride, width1, height1, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
+    rasterize(buf,  width,  height,  stride, dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
+    rasterize(buf1, width1, height1, stride, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
 }
 
-void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int x0, int y0, int width, int height)
+void Polyline::rasterize(uint8_t *buf, int x0, int y0, int width, int height, ptrdiff_t stride, bool vert_flip)
 {
-    x0 <<= pixel_order;  y0 <<= pixel_order;
     assert(width && !(width & tile_mask) && height && !(height & tile_mask));
+    x0 <<= pixel_order;  y0 <<= pixel_order;
+
+    if(vert_flip)
+    {
+        buf += (height - 1) * stride;  stride = -stride;
+    }
 
     vector<Line> &line = linebuf[0];  assert(line.size());
     for(size_t i = 0; i < line.size(); i++)
@@ -411,7 +413,7 @@ void Polyline::rasterize(uint8_t *buf, ptrdiff_t stride, int x0, int y0, int wid
         winding = split_vert(linebuf[src], 0, linebuf[dst0], linebuf[dst1], 0);
         linebuf[src].clear();  linebuf[dst0].clear();  swap(src, dst1);
     }
-    rasterize(buf, stride, width, height, src, 0, winding);
+    rasterize(buf, width, height, stride, src, 0, winding);
 }
 
 
@@ -446,7 +448,7 @@ void Polyline::test()
     };
     static const size_t n = sizeof(pt) / sizeof(pt[0]);
 
-    winding_mask = -1;  linebuf[0].clear();
+    linebuf[0].clear();
     x_min = y_min = numeric_limits<int32_t>::max();
     x_max = y_max = numeric_limits<int32_t>::min();
     for(size_t i = 1; i < n; i++)add_line(pt[i - 1], pt[i]);
@@ -454,6 +456,6 @@ void Polyline::test()
 
     const int w = 64, h = 64;
     uint8_t bitmap[w * h] alignas(16);
-    rasterize(bitmap + (h - 1) * w, -w, 0, 0, w, h);
+    rasterize(bitmap, 0, 0, w, h, w);
     print_bitmap(bitmap, w, h, w);
 }

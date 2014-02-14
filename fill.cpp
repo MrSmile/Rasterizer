@@ -54,7 +54,7 @@ inline int16x8_t absval(int16x8_t value)
 }
 
 
-void fill_solid_line16(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set)
+void fill_solid_line16(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set)
 {
     assert(!(reinterpret_cast<uintptr_t>(buf) & 15) && !(stride & 15));
     uint8x16_t *ptr = reinterpret_cast<uint8x16_t *>(__builtin_assume_aligned(buf, 16));
@@ -69,7 +69,7 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
 {
     if(x_ord >= 4)
     {
-        fill_solid_line16(buf, stride, int32_t(1) << (x_ord - 4),  int32_t(1) << y_ord, set);  return;
+        fill_solid_line16(buf, int32_t(1) << (x_ord - 4), int32_t(1) << y_ord, stride, set);  return;
     }
 
     uint8_t value = set ? 255 : 0;
@@ -77,10 +77,10 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
         for(int i = 0; i < 1 << x_ord; i++)buf[i] = value;
 }
 
-void Polyline::fill_solid(uint8_t *buf, ptrdiff_t stride, int width, int height, bool set)
+void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set)
 {
     assert(width > 0 && !(width & 15) && height > 0);
-    fill_solid_line16(buf, stride, width >> 4, height, set);
+    fill_solid_line16(buf, width >> 4, height, stride, set);
 
     /*
     uint8_t value = set ? 255 : 0;
@@ -128,7 +128,7 @@ template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t 
     }
 }
 
-void Polyline::fill_halfplane(uint8_t *buf, ptrdiff_t stride, int width, int height, int32_t a, int32_t b, int64_t c)
+void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
 {
     assert(width > 0 && !(width & tile_mask) && height > 0 && !(height & tile_mask));
     if(width == tile_mask + 1 && height == tile_mask + 1)
@@ -245,12 +245,11 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         }
         beg = pos;  end += count[j];
 
-        fill_line<x_ord, y_ord, res_ord>(buf, cur += delta[j], seg + beg, end - beg);  // unsupported winding_mask!
+        fill_line<x_ord, y_ord, res_ord>(buf, cur += delta[j], seg + beg, end - beg);
     }
 }
 
-void Polyline::fill_generic(uint8_t *buf, ptrdiff_t stride,
-    int width, int height, const Line *line, size_t size, int winding)
+void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, const Line *line, size_t size, int winding)
 {
     assert(width == tile_mask + 1 && height == tile_mask + 1);
 
