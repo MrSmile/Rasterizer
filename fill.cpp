@@ -24,6 +24,19 @@ inline constexpr int16x8_t int16x8(int16_t val)
     return int16x8_t{val, val, val, val, val, val, val, val};
 }
 
+constexpr int16x8_t vec_index[] =
+{
+    { 0,  1,  2,  3,  4,  5,  6,  7},
+    { 8,  9, 10, 11, 12, 13, 14, 15},
+    {16, 17, 18, 19, 20, 21, 22, 23},
+    {24, 25, 26, 27, 28, 29, 30, 31},
+    {32, 33, 34, 35, 36, 37, 38, 39},
+    {40, 41, 42, 43, 44, 45, 46, 47},
+    {48, 49, 50, 51, 52, 53, 54, 55},
+    {56, 57, 58, 59, 60, 61, 62, 63},
+};
+
+
 
 inline int16_t limit(int16_t value, int16_t top)
 {
@@ -89,13 +102,13 @@ void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride,
 }
 
 
-template<int x_ord, int res_ord> struct HalfplaneFiller
+template<int width, int res_ord> struct HalfplaneFillerGeneric
 {
-    int16_t va1[1 << x_ord], va2[1 << x_ord];
+    int16_t va1[width], va2[width];
 
-    HalfplaneFiller(int16_t a, int16_t delta)
+    void init(int16_t a, int16_t delta)
     {
-        for(int i = 0; i < 1 << x_ord; i++)
+        for(int i = 0; i < width; i++)
         {
             va1[i] = a * i - delta;  va2[i] = a * i + delta;
         }
@@ -105,22 +118,20 @@ template<int x_ord, int res_ord> struct HalfplaneFiller
     {
         static constexpr int16_t full = (256 << (8 - res_ord)) - 1;
 
-        for(int i = 0; i < 1 << x_ord; i++)
+        for(int i = 0; i < width; i++)
             buf[i] = (limit(c - va1[i], full) + limit(c - va2[i], full)) >> (9 - res_ord);
     }
 };
 
-template<int res_ord> struct HalfplaneFiller<4, res_ord>
+template<int width, int res_ord> struct HalfplaneFillerSSE
 {
-    int16x8_t va1[2], va2[2];
+    int16x8_t va1[width], va2[width];
 
-    HalfplaneFiller(int16_t a, int16_t delta)
+    void init(int16_t a, int16_t delta)
     {
-        static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
-
-        for(int i = 0; i < 2; i++)
+        for(int i = 0; i < width; i++)
         {
-            va1[i] = a * vi[i] - delta;  va2[i] = a * vi[i] + delta;
+            va1[i] = a * vec_index[i] - delta;  va2[i] = a * vec_index[i] + delta;
         }
     }
 
@@ -131,12 +142,15 @@ template<int res_ord> struct HalfplaneFiller<4, res_ord>
         assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
         char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
 
-        int16x8_t res[2];
-        for(int i = 0; i < 2; i++)
-            res[i] = (limit(c - va1[i], full) + limit(c - va2[i], full)) >> (9 - res_ord);
-        *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
+        int16x8_t res[width];
+        for(int i = 0; i < width; i++)res[i] = (limit(c - va1[i], full) + limit(c - va2[i], full)) >> (9 - res_ord);
+        for(int i = 0; i < width / 2; i++)ptr[i] = __builtin_ia32_packuswb128(res[2 * i], res[2 * i + 1]);
     }
 };
+
+template<int x_ord, int res_ord> struct HalfplaneFiller : public HalfplaneFillerGeneric<1 << x_ord, res_ord> { };
+template<int res_ord> struct HalfplaneFiller<4, res_ord> : public HalfplaneFillerSSE<2, res_ord> { };
+template<int res_ord> struct HalfplaneFiller<5, res_ord> : public HalfplaneFillerSSE<4, res_ord> { };
 
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
@@ -148,7 +162,7 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
     int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
 
-    HalfplaneFiller<x_ord, res_ord> filler(aa, delta);
+    HalfplaneFiller<x_ord, res_ord> filler;  filler.init(aa, delta);
     for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)filler.fill_line(buf, cc);
 }
 
@@ -173,18 +187,18 @@ void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t str
 }
 
 
-template<int x_ord> struct ScanLine
+template<int width> struct ScanLineGeneric
 {
-    int16_t res[1 << x_ord];
+    int16_t res[width];
 
-    ScanLine(int16_t base)
+    void init(int16_t base)
     {
-        for(int i = 0; i < 1 << x_ord; i++)res[i] = base;
+        for(int i = 0; i < width; i++)res[i] = base;
     }
 
     void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
     {
-        for(int i = 0; i < 1 << x_ord; i++)
+        for(int i = 0; i < width; i++)
         {
             int16_t aw = mul_high(a * i, w);
             res[i] += limit(offs1 - aw, size) + limit(offs2 - aw, size);
@@ -193,25 +207,24 @@ template<int x_ord> struct ScanLine
 
     void fill_line(uint8_t *buf)
     {
-        for(int i = 0; i < 1 << x_ord; i++)buf[i] = min<int16_t>(255, absval(res[i]));
+        for(int i = 0; i < width; i++)buf[i] = min<int16_t>(255, absval(res[i]));
     }
 };
 
-template<> struct ScanLine<4>
+template<int width> struct ScanLineSSE
 {
-    int16x8_t res[2];
+    int16x8_t res[width];
 
-    ScanLine(int16_t base) : res{int16x8(base), int16x8(base)}
+    void init(int16_t base)
     {
+        for(int i = 0; i < width; i++)res[i] = int16x8(base);
     }
 
     void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
     {
-        static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
-
-        for(int i = 0; i < 2; i++)
+        for(int i = 0; i < width; i++)
         {
-            int16x8_t aw = mul_high(a * vi[i], int16x8(w));
+            int16x8_t aw = mul_high(a * vec_index[i], int16x8(w));
             res[i] += limit(offs1 - aw, int16x8(size)) + limit(offs2 - aw, int16x8(size));
         }
     }
@@ -220,10 +233,15 @@ template<> struct ScanLine<4>
     {
         assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
         char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
-        for(int i = 0; i < 2; i++)res[i] = absval(res[i]);
-        *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
+
+        for(int i = 0; i < width; i++)res[i] = absval(res[i]);
+        for(int i = 0; i < width / 2; i++)ptr[i] = __builtin_ia32_packuswb128(res[2 * i], res[2 * i + 1]);
     }
 };
+
+template<int x_ord> struct ScanLine : public ScanLineGeneric<1 << x_ord> { };
+template<> struct ScanLine<4> : public ScanLineSSE<2> { };
+template<> struct ScanLine<5> : public ScanLineSSE<4> { };
 
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_generic(uint8_t *buf, ptrdiff_t stride,
@@ -311,7 +329,7 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         }
         beg = pos;  end += count[j];
 
-        ScanLine<x_ord> res(cur += delta[j]);
+        ScanLine<x_ord> res;  res.init(cur += delta[j]);
         for(int k = beg; k < end; k++)
         {
             int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
