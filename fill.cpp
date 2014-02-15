@@ -94,22 +94,30 @@ void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride,
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
 {
+    static constexpr int16_t full = (256 << (8 - res_ord)) - 1;
     static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
 
     int16_t aa = rounded_shift(a, res_ord + 14);
     int16_t bb = rounded_shift(b, res_ord + 14);
     int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
+    int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
 
-    int16_t va[1 << x_ord];
-    for(int i = 0; i < 1 << x_ord; i++)va[i] = aa * i;
+    int16_t va1[1 << x_ord], va2[1 << x_ord];
+    for(int i = 0; i < 1 << x_ord; i++)
+    {
+        va1[i] = aa * i - delta;  va2[i] = aa * i + delta;
+    }
     for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)
         for(int i = 0; i < 1 << x_ord; i++)
-            buf[i] = limit((cc - va[i]) >> (8 - res_ord), 255);
+            buf[i] = (limit(cc - va1[i], full) + limit(cc - va2[i], full)) >> (9 - res_ord);
 }
 
 template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
 {
     constexpr int res_ord = 6;
+    static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
+    static constexpr int16x8_t full = int16x8((256 << (8 - res_ord)) - 1);
+
     assert(!(reinterpret_cast<uintptr_t>(buf) & 15) && !(stride & 15));
     char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
     stride >>= 4;
@@ -117,13 +125,18 @@ template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t 
     int16_t aa = rounded_shift(a, res_ord + 14);
     int16_t bb = rounded_shift(b, res_ord + 14);
     int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
+    int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
 
-    int16x8_t va[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
-    for(int i = 0; i < 2; i++)va[i] *= aa;
+    int16x8_t va1[2], va2[2];
+    for(int i = 0; i < 2; i++)
+    {
+        va1[i] = aa * vi[i] - delta;  va2[i] = aa * vi[i] + delta;
+    }
     for(int j = 0; j < 16; j++, ptr += stride, cc -= bb)
     {
         int16x8_t res[2];
-        for(int i = 0; i < 2; i++)res[i] = (cc - va[i]) >> (8 - res_ord);
+        for(int i = 0; i < 2; i++)
+            res[i] = (limit(cc - va1[i], full) + limit(cc - va2[i], full)) >> (9 - res_ord);
         *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
     }
 }
@@ -156,13 +169,18 @@ template<int x_ord, int y_ord, int res_ord> void fill_line(uint8_t *buf, int16_t
     for(int k = 0; k < n_seg; k++)
     {
         int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
-        int16_t size = (top - seg[k].cur) << (8 - Polyline::pixel_order), offs = size >> 1;
-        //int16_t w = min<int32_t>(1 << (res_ord + 8), (int32_t(size) << 16) / absval(seg[k].a));
-        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 8))) + (1 << (res_ord + 8));
+        int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
+        //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
+        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
         int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
+        int16_t dc = rounded_shift(min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)), 9);
+        int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
 
         for(int i = 0; i < 1 << x_ord; i++)
-            res[i] += limit(mul_high(c - seg[k].a * i, w) + offs, size);
+        {
+            int16_t a = mul_high(seg[k].a * i, w);
+            res[i] += limit(offs1 - a, size) + limit(offs2 - a, size);
+        }
     }
     for(int i = 0; i < 1 << x_ord; i++)buf[i] = min<int16_t>(255, absval(res[i]));
 }
@@ -179,13 +197,18 @@ template<> void fill_line<4, 4, 6>(uint8_t *buf, int16_t base, Polyline::ScanSeg
     for(int k = 0; k < n_seg; k++)
     {
         int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
-        int16_t size = (top - seg[k].cur) << (8 - Polyline::pixel_order), offs = size >> 1;
-        //int16_t w = min<int32_t>(1 << (res_ord + 8), (int32_t(size) << 16) / absval(seg[k].a));
-        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 8))) + (1 << (res_ord + 8));
+        int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
+        //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
+        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
         int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
+        int16_t dc = rounded_shift(min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)), 9);
+        int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
 
         for(int i = 0; i < 2; i++)
-            res[i] += limit(mul_high(c - seg[k].a * vi[i], int16x8(w)) + offs, int16x8(size));
+        {
+            int16x8_t va = mul_high(seg[k].a * vi[i], int16x8(w));
+            res[i] += limit(offs1 - va, int16x8(size)) + limit(offs2 - va, int16x8(size));
+        }
     }
     for(int i = 0; i < 2; i++)res[i] = absval(res[i]);
     *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
