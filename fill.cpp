@@ -2,7 +2,6 @@
 //
 
 #include "raster.h"
-#include <iostream>  // DEBUG
 #include <cassert>
 #include <limits>
 
@@ -236,7 +235,7 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
                 {
                     pos += k;  c += dc;
                 }
-            line[i].y_min = int32_t(pos) << Polyline::pixel_order;
+            line[i].y_min = max(line[i].y_min, int32_t(pos) << Polyline::pixel_order);
         }
         if(!(line[i].flags & Polyline::Line::f_exact_u))
         {
@@ -251,7 +250,7 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
                 {
                     pos += k;  c += dc;
                 }
-            line[i].y_max = int32_t(pos + 1) << Polyline::pixel_order;
+            line[i].y_max = min(line[i].y_max, int32_t(pos + 1) << Polyline::pixel_order);
         }
         assert(line[i].y_min <= line[i].y_max);
 
