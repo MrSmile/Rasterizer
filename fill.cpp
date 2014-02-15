@@ -32,7 +32,7 @@ inline int16_t limit(int16_t value, int16_t top)
 
 inline int16x8_t limit(int16x8_t value, int16x8_t top)
 {
-    constexpr int16x8_t zero = int16x8(0);
+    static constexpr int16x8_t zero = int16x8(0);
     return __builtin_ia32_pminsw128(top, __builtin_ia32_pmaxsw128(zero, value));
 }
 
@@ -48,8 +48,7 @@ inline int16x8_t mul_high(int16x8_t a, int16x8_t b)
 
 inline int16x8_t absval(int16x8_t value)
 {
-    int16x8_t flag = value >> 15;
-    return (value ^ flag) + (flag & 1);
+    return __builtin_ia32_pmaxsw128(value, -value);
 }
 
 
@@ -90,10 +89,58 @@ void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride,
 }
 
 
+template<int x_ord, int res_ord> struct HalfplaneFiller
+{
+    int16_t va1[1 << x_ord], va2[1 << x_ord];
+
+    HalfplaneFiller(int16_t a, int16_t delta)
+    {
+        for(int i = 0; i < 1 << x_ord; i++)
+        {
+            va1[i] = a * i - delta;  va2[i] = a * i + delta;
+        }
+    }
+
+    void fill_line(uint8_t *buf, int16_t c)
+    {
+        static constexpr int16_t full = (256 << (8 - res_ord)) - 1;
+
+        for(int i = 0; i < 1 << x_ord; i++)
+            buf[i] = (limit(c - va1[i], full) + limit(c - va2[i], full)) >> (9 - res_ord);
+    }
+};
+
+template<int res_ord> struct HalfplaneFiller<4, res_ord>
+{
+    int16x8_t va1[2], va2[2];
+
+    HalfplaneFiller(int16_t a, int16_t delta)
+    {
+        static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
+
+        for(int i = 0; i < 2; i++)
+        {
+            va1[i] = a * vi[i] - delta;  va2[i] = a * vi[i] + delta;
+        }
+    }
+
+    void fill_line(uint8_t *buf, int16_t c)
+    {
+        static constexpr int16x8_t full = int16x8((256 << (8 - res_ord)) - 1);
+
+        assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
+        char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
+
+        int16x8_t res[2];
+        for(int i = 0; i < 2; i++)
+            res[i] = (limit(c - va1[i], full) + limit(c - va2[i], full)) >> (9 - res_ord);
+        *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
+    }
+};
+
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
 {
-    static constexpr int16_t full = (256 << (8 - res_ord)) - 1;
     static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
 
     int16_t aa = rounded_shift(a, res_ord + 14);
@@ -101,43 +148,8 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
     int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
 
-    int16_t va1[1 << x_ord], va2[1 << x_ord];
-    for(int i = 0; i < 1 << x_ord; i++)
-    {
-        va1[i] = aa * i - delta;  va2[i] = aa * i + delta;
-    }
-    for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)
-        for(int i = 0; i < 1 << x_ord; i++)
-            buf[i] = (limit(cc - va1[i], full) + limit(cc - va2[i], full)) >> (9 - res_ord);
-}
-
-template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
-{
-    constexpr int res_ord = 6;
-    static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
-    static constexpr int16x8_t full = int16x8((256 << (8 - res_ord)) - 1);
-
-    assert(!(reinterpret_cast<uintptr_t>(buf) & 15) && !(stride & 15));
-    char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
-    stride >>= 4;
-
-    int16_t aa = rounded_shift(a, res_ord + 14);
-    int16_t bb = rounded_shift(b, res_ord + 14);
-    int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
-    int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
-
-    int16x8_t va1[2], va2[2];
-    for(int i = 0; i < 2; i++)
-    {
-        va1[i] = aa * vi[i] - delta;  va2[i] = aa * vi[i] + delta;
-    }
-    for(int j = 0; j < 16; j++, ptr += stride, cc -= bb)
-    {
-        int16x8_t res[2];
-        for(int i = 0; i < 2; i++)
-            res[i] = (limit(cc - va1[i], full) + limit(cc - va2[i], full)) >> (9 - res_ord);
-        *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
-    }
+    HalfplaneFiller<x_ord, res_ord> filler(aa, delta);
+    for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)filler.fill_line(buf, cc);
 }
 
 void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
@@ -161,57 +173,57 @@ void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t str
 }
 
 
-template<int x_ord, int y_ord, int res_ord> void fill_line(uint8_t *buf, int16_t base, Polyline::ScanSegment *seg, int n_seg)
+template<int x_ord> struct ScanLine
 {
     int16_t res[1 << x_ord];
-    for(int i = 0; i < 1 << x_ord; i++)res[i] = base;
-    for(int k = 0; k < n_seg; k++)
-    {
-        int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
-        int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
-        //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
-        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
-        int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
-        int16_t dc = rounded_shift(min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)), 9);
-        int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
 
+    ScanLine(int16_t base)
+    {
+        for(int i = 0; i < 1 << x_ord; i++)res[i] = base;
+    }
+
+    void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
+    {
         for(int i = 0; i < 1 << x_ord; i++)
         {
-            int16_t a = mul_high(seg[k].a * i, w);
-            res[i] += limit(offs1 - a, size) + limit(offs2 - a, size);
+            int16_t aw = mul_high(a * i, w);
+            res[i] += limit(offs1 - aw, size) + limit(offs2 - aw, size);
         }
     }
-    for(int i = 0; i < 1 << x_ord; i++)buf[i] = min<int16_t>(255, absval(res[i]));
-}
 
-template<> void fill_line<4, 4, 6>(uint8_t *buf, int16_t base, Polyline::ScanSegment *seg, int n_seg)
-{
-    constexpr int res_ord = 6;
-    static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
-
-    assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
-    char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
-
-    int16x8_t res[2] = {int16x8(base), int16x8(base)};
-    for(int k = 0; k < n_seg; k++)
+    void fill_line(uint8_t *buf)
     {
-        int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
-        int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
-        //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
-        int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
-        int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
-        int16_t dc = rounded_shift(min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)), 9);
-        int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
+        for(int i = 0; i < 1 << x_ord; i++)buf[i] = min<int16_t>(255, absval(res[i]));
+    }
+};
+
+template<> struct ScanLine<4>
+{
+    int16x8_t res[2];
+
+    ScanLine(int16_t base) : res{int16x8(base), int16x8(base)}
+    {
+    }
+
+    void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
+    {
+        static const int16x8_t vi[2] = {{0, 1, 2, 3, 4, 5, 6, 7}, {8, 9, 10, 11, 12, 13, 14, 15}};
 
         for(int i = 0; i < 2; i++)
         {
-            int16x8_t va = mul_high(seg[k].a * vi[i], int16x8(w));
-            res[i] += limit(offs1 - va, int16x8(size)) + limit(offs2 - va, int16x8(size));
+            int16x8_t aw = mul_high(a * vi[i], int16x8(w));
+            res[i] += limit(offs1 - aw, int16x8(size)) + limit(offs2 - aw, int16x8(size));
         }
     }
-    for(int i = 0; i < 2; i++)res[i] = absval(res[i]);
-    *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
-}
+
+    void fill_line(uint8_t *buf)
+    {
+        assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
+        char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
+        for(int i = 0; i < 2; i++)res[i] = absval(res[i]);
+        *ptr = __builtin_ia32_packuswb128(res[0], res[1]);
+    }
+};
 
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_generic(uint8_t *buf, ptrdiff_t stride,
@@ -299,7 +311,19 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         }
         beg = pos;  end += count[j];
 
-        fill_line<x_ord, y_ord, res_ord>(buf, cur += delta[j], seg + beg, end - beg);
+        ScanLine<x_ord> res(cur += delta[j]);
+        for(int k = beg; k < end; k++)
+        {
+            int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
+            int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
+            //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
+            int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
+            int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
+            int16_t dc = min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)) >> 9;
+            int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
+            res.add_segment(seg[k].a, w, offs1, offs2, size);
+        }
+        res.fill_line(buf);
     }
 }
 
