@@ -62,7 +62,7 @@ void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int
     uint8_t *src2 = image.data() + 1 * height * stride;
     uint8_t *dst  = image.data() + 2 * height * stride;
     for(int i = 0; i < height * stride; i++)
-        dst[i] = 127 + 4 * (src1[i] - src2[i]);
+        dst[i] = max(0, min(255, 4 * (src1[i] - src2[i]) + 127));
 
     write_image("output.png", image.data(), stride, 3 * height);
 }
