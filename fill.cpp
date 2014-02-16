@@ -191,23 +191,14 @@ template<int width> struct ScanLineGeneric
 {
     int16_t res[width];
 
-    void init(int16_t base)
+    ScanLineGeneric()
     {
-        for(int i = 0; i < width; i++)res[i] = base;
+        for(int i = 0; i < width; i++)res[i] = 0;
     }
 
-    void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
+    void fill_line(uint8_t *buf, int16_t offs)
     {
-        for(int i = 0; i < width; i++)
-        {
-            int16_t aw = mul_high(a * i, w);
-            res[i] += limit(offs1 - aw, size) + limit(offs2 - aw, size);
-        }
-    }
-
-    void fill_line(uint8_t *buf)
-    {
-        for(int i = 0; i < width; i++)buf[i] = min<int16_t>(255, absval(res[i]));
+        for(int i = 0; i < width; i++)buf[i] = min<int16_t>(255, absval(res[i] + offs));
     }
 };
 
@@ -215,26 +206,17 @@ template<int width> struct ScanLineSSE
 {
     int16x8_t res[width];
 
-    void init(int16_t base)
+    ScanLineSSE()
     {
-        for(int i = 0; i < width; i++)res[i] = int16x8(base);
+        for(int i = 0; i < width; i++)res[i] = int16x8(0);
     }
 
-    void add_segment(int16_t a, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
-    {
-        for(int i = 0; i < width; i++)
-        {
-            int16x8_t aw = mul_high(a * vec_index[i], int16x8(w));
-            res[i] += limit(offs1 - aw, int16x8(size)) + limit(offs2 - aw, int16x8(size));
-        }
-    }
-
-    void fill_line(uint8_t *buf)
+    void fill_line(uint8_t *buf, int16_t offs)
     {
         assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
         char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));
 
-        for(int i = 0; i < width; i++)res[i] = absval(res[i]);
+        for(int i = 0; i < width; i++)res[i] = absval(res[i] + offs);
         for(int i = 0; i < width / 2; i++)ptr[i] = __builtin_ia32_packuswb128(res[2 * i], res[2 * i + 1]);
     }
 };
@@ -243,59 +225,113 @@ template<int x_ord> struct ScanLine : public ScanLineGeneric<1 << x_ord> { };
 template<> struct ScanLine<4> : public ScanLineSSE<2> { };
 template<> struct ScanLine<5> : public ScanLineSSE<4> { };
 
+
+template<int width, int res_ord> struct ScanLineFillerGeneric
+{
+    int16_t a;
+
+    void init(int16_t a_)
+    {
+        a = a_;
+    }
+
+    void add_line(ScanLineGeneric<width> &line, int16_t c1, int16_t c2)
+    {
+        static constexpr int16_t full = 256 << (8 - res_ord);
+
+        for(int i = 0; i < width; i++)
+            line.res[i] += (limit(c1 - a * i, full) + limit(c2 - a * i, full)) >> (9 - res_ord);
+    }
+
+    void add_line(ScanLineGeneric<width> &line, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
+    {
+        for(int i = 0; i < width; i++)
+        {
+            int16_t aw = mul_high(a * i, w);
+            line.res[i] += limit(offs1 - aw, size) + limit(offs2 - aw, size);
+        }
+    }
+};
+
+template<int width, int res_ord> struct ScanLineFillerSSE
+{
+    int16x8_t va[width];
+
+    void init(int16_t a)
+    {
+        for(int i = 0; i < width; i++)va[i] = a * vec_index[i];
+    }
+
+    void add_line(ScanLineSSE<width> &line, int16_t c1, int16_t c2)
+    {
+        static constexpr int16x8_t full = int16x8(256 << (8 - res_ord));
+
+        for(int i = 0; i < width; i++)
+            line.res[i] += (limit(c1 - va[i], full) + limit(c2 - va[i], full)) >> (9 - res_ord);
+    }
+
+    void add_line(ScanLineSSE<width> &line, int16_t w, int16_t offs1, int16_t offs2, int16_t size)
+    {
+        for(int i = 0; i < width; i++)
+        {
+            int16x8_t aw = mul_high(va[i], int16x8(w));
+            line.res[i] += limit(offs1 - aw, int16x8(size)) + limit(offs2 - aw, int16x8(size));
+        }
+    }
+};
+
+template<int x_ord, int res_ord> struct ScanLineFillerBase : public ScanLineFillerGeneric<1 << x_ord, res_ord> { };
+template<int res_ord> struct ScanLineFillerBase<4, res_ord> : public ScanLineFillerSSE<2, res_ord> { };
+template<int res_ord> struct ScanLineFillerBase<5, res_ord> : public ScanLineFillerSSE<4, res_ord> { };
+
+
+template<int x_ord, int res_ord> struct ScanLineFiller : public ScanLineFillerBase<x_ord, res_ord>
+{
+    typedef ScanLineFillerBase<x_ord, res_ord> Base;
+
+    int16_t a_abs, b, dc1, dc2;
+
+    void init(int16_t a_, int16_t b_)
+    {
+        Base::init(a_);  a_abs = absval(a_);  b = b_;
+        int16_t delta = rounded_shift(min(a_abs, absval(b_)), 2);
+        int16_t base = (int16_t(1) << (15 - res_ord)) - (b >> 1);
+        dc1 = base + delta;  dc2 = base - delta;
+    }
+
+    void update_line(ScanLine<x_ord> &line, int16_t c, int dn, int up)
+    {
+        int16_t size = (up - dn) << (7 - Polyline::pixel_order), offs = size >> 1;
+        //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, a_abs));
+        int16_t w = min<int16_t>(0, (size << res_ord) - (a_abs << (2 * res_ord - 9))) + (1 << (res_ord + 7));
+        c -= int32_t(b) * int16_t(dn + up) >> (Polyline::pixel_order + 1);
+        int16_t dc = min(int32_t(a_abs) << 7, absval(b) * int32_t(size)) >> 9;
+        int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
+        Base::add_line(line, w, offs1, offs2, size);
+    }
+
+    void update_line(ScanLine<x_ord> &line, int16_t c)
+    {
+        //update_line(line, c, 0, 1 << Polyline::pixel_order);
+        Base::add_line(line, c + dc1, c + dc2);
+    }
+};
+
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
-    void fill_generic(uint8_t *buf, ptrdiff_t stride,
-        Polyline::Line *line, size_t n_lines, int winding, Polyline::ScanSegment *seg)
+    void fill_generic(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
 {
     static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
 
-    size_t count[1 << y_ord];  memset(count, 0, sizeof(count));
-    for(size_t i = 0; i < n_lines; i++)
-    {
-        if(!(line[i].flags & Polyline::Line::f_exact_d))
-        {
-            int64_t c = line[i].c - line[i].a * int64_t(line[i].is_ur_dl() ? line[i].x_min : line[i].x_max);
-            int64_t dc = -int64_t(line[i].b) << (Polyline::pixel_order + y_ord - 1);  int pos = 0;
-            if(dc < 0)
-            {
-                c = -c;  dc = -dc;
-            }
-            for(int k = 1 << (y_ord - 1); k; k >>= 1, dc >>= 1)
-                if(c + dc <= 0)
-                {
-                    pos += k;  c += dc;
-                }
-            line[i].y_min = max(line[i].y_min, int32_t(pos) << Polyline::pixel_order);
-        }
-        if(!(line[i].flags & Polyline::Line::f_exact_u))
-        {
-            int64_t c = line[i].c - line[i].a * int64_t(line[i].is_ur_dl() ? line[i].x_max : line[i].x_min);
-            int64_t dc = -int64_t(line[i].b) << (Polyline::pixel_order + y_ord - 1);  int pos = 0;
-            if(dc < 0)
-            {
-                c = -c;  dc = -dc;
-            }
-            for(int k = 1 << (y_ord - 1); k; k >>= 1, dc >>= 1)
-                if(c + dc < 0)
-                {
-                    pos += k;  c += dc;
-                }
-            line[i].y_max = min(line[i].y_max, int32_t(pos + 1) << Polyline::pixel_order);
-        }
-        assert(line[i].y_min <= line[i].y_max);
-
-        assert(line[i].y_min >= 0 && line[i].y_min < int32_t(1) << (y_ord + Polyline::pixel_order));
-        assert(line[i].y_max > 0 && line[i].y_max <= int32_t(1) << (y_ord + Polyline::pixel_order));
-        if(line[i].y_min < line[i].y_max)count[line[i].y_min >> Polyline::pixel_order]++;
-    }
-
-    size_t index[1 << y_ord], prev = 0;
-    for(int i = 0; i < 1 << y_ord; i++)index[i] = (prev += count[i]);
-
+    ScanLine<x_ord> res[1 << y_ord];
+    ScanLineFiller<x_ord, res_ord> filler;
     int16_t delta[(1 << y_ord) + 2];  memset(delta, 0, sizeof(delta));
     constexpr int16_t pixel_mask = (1 << Polyline::pixel_order) - 1;
     for(size_t i = 0; i < n_lines; i++)
     {
+        assert(line[i].y_min >= 0 && line[i].y_min < int32_t(1) << (y_ord + Polyline::pixel_order));
+        assert(line[i].y_max > 0 && line[i].y_max <= int32_t(1) << (y_ord + Polyline::pixel_order));
+        assert(line[i].y_min <= line[i].y_max);
+
         int16_t dn_delta = line[i].is_up() ? 256 >> Polyline::pixel_order : 0;
         int16_t up_delta = line[i].is_split_x() == line[i].is_up() ? 0 : 256 >> Polyline::pixel_order;
         if(line[i].is_ur_dl())swap(dn_delta, up_delta);
@@ -308,47 +344,31 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         delta[up + 1] += up_delta1;  delta[up] += (up_delta << Polyline::pixel_order) - up_delta1;
         if(line[i].y_min == line[i].y_max)continue;
 
-        size_t pos = --index[dn];  seg[pos].cur = dn_pos;
-        seg[pos].total = line[i].y_max - (dn << Polyline::pixel_order);
-        assert(seg[pos].total - seg[pos].cur == line[i].y_max - line[i].y_min);
+        int16_t a = line[i].a_norm(res_ord + 14);
+        int16_t b = line[i].b_norm(res_ord + 14);
+        int16_t c = line[i].c_norm(res_ord + 14) - (a >> 1) - b * dn;
+        filler.init(a, b);
 
-        seg[pos].a = line[i].a_norm(res_ord + 14);  seg[pos].b = line[i].b_norm(res_ord + 14);
-        seg[pos].c = line[i].c_norm(res_ord + 14) - (seg[pos].a >> 1) - seg[pos].b * dn;
+        if(dn_pos)
+        {
+            if(up == dn)
+            {
+                filler.update_line(res[dn], c, dn_pos, up_pos);  continue;
+            }
+            filler.update_line(res[dn], c, dn_pos, 1 << Polyline::pixel_order);
+            dn++;  c -= b;
+        }
+        for(int j = dn; j < up; j++, c -= b)filler.update_line(res[j], c);
+        if(up_pos)filler.update_line(res[up], c, 0, up_pos);
     }
 
-    int16_t cur = 256 * winding;  int beg = 0, end = 0;
+    int16_t cur = 256 * winding;
     for(int j = 0; j < 1 << y_ord; j++, buf += stride)
-    {
-        int pos = end;
-        for(int k = end - 1; k != beg - 1; k--)if(seg[k].total > 1 << Polyline::pixel_order)
-        {
-            pos--;  seg[pos].cur = 0;
-            seg[pos].total = seg[k].total - (1 << Polyline::pixel_order);
-            seg[pos].a = seg[k].a;  seg[pos].b = seg[k].b;
-            seg[pos].c = seg[k].c - seg[pos].b;
-        }
-        beg = pos;  end += count[j];
-
-        ScanLine<x_ord> res;  res.init(cur += delta[j]);
-        for(int k = beg; k < end; k++)
-        {
-            int16_t top = min<int16_t>(1 << Polyline::pixel_order, seg[k].total);
-            int16_t size = (top - seg[k].cur) << (7 - Polyline::pixel_order), offs = size >> 1;
-            //int16_t w = min<int32_t>(1 << (res_ord + 7), (int32_t(size) << 16) / max<int16_t>(1, absval(seg[k].a)));
-            int16_t w = min<int16_t>(0, (size << res_ord) - (absval(seg[k].a) << (2 * res_ord - 9))) + (1 << (res_ord + 7));
-            int16_t c = seg[k].c - ((int32_t(seg[k].b) * int16_t(top + seg[k].cur)) >> (Polyline::pixel_order + 1));
-            int16_t dc = min(int32_t(absval(seg[k].a)) << 7, absval(seg[k].b) * int32_t(size)) >> 9;
-            int16_t offs1 = mul_high(c - dc, w) + offs, offs2 = mul_high(c + dc, w) + offs;
-            res.add_segment(seg[k].a, w, offs1, offs2, size);
-        }
-        res.fill_line(buf);
-    }
+        res[j].fill_line(buf, cur += delta[j]);
 }
 
 void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, Line *line, size_t size, int winding)
 {
     assert(width == tile_mask + 1 && height == tile_mask + 1);
-
-    scanbuf.resize(size);
-    ::fill_generic<tile_order, tile_order>(buf, stride, line, size, winding, scanbuf.data());
+    ::fill_generic<tile_order, tile_order>(buf, stride, line, size, winding);
 }

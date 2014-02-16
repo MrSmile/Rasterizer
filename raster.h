@@ -151,18 +151,10 @@ public:
         }
     };
 
-    struct ScanSegment
-    {
-        uint8_t cur;
-        int16_t total;
-        int16_t a, b, c;
-    };
-
 
 private:
     std::vector<Line> linebuf[3];
     int32_t x_min, x_max, y_min, y_max;
-    std::vector<ScanSegment> scanbuf;
 
 
     bool add_line(const Point &pt0, const Point &pt1);
