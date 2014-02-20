@@ -62,7 +62,7 @@ public:
             f_up = 1, f_ur_dl = 2, f_exact_l = 4, f_exact_r = 8, f_exact_d = 16, f_exact_u = 32
         };
 
-        uint8_t flags, order;
+        uint8_t flags;
         int32_t x_min, x_max, y_min, y_max;
         int32_t a, b, scale;
         int64_t c;
@@ -132,23 +132,6 @@ public:
         void move_y(int32_t y);
         void split_horz(int32_t x, Line &next);
         void split_vert(int32_t y, Line &next);
-
-        int32_t a_norm(int shift = 0) const
-        {
-            return rounded_shift(int64_t(a) * scale, order + shift);
-        }
-
-        int32_t b_norm(int shift = 0) const
-        {
-            return rounded_shift(int64_t(b) * scale, order + shift);
-        }
-
-        int64_t c_norm(int shift = 0) const
-        {
-            int c_ord = ilog2(uint64_t(absval(c)));
-            int64_t cn = rounded_shift(c << (62 - c_ord), 32);
-            return rounded_shift(cn * scale, order + shift - c_ord + pixel_order + 30);
-        }
     };
 
 
@@ -162,7 +145,7 @@ private:
     bool add_cubic(const Point &pt0, const Point &pt1, const Point &pt2, const Point &pt3);
 
     void fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set);
-    void fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c);
+    void fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
     void fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, Line *line, size_t size, int winding);
     uint8_t calc_pixel(std::vector<Line> &line, size_t offs, int winding);
 

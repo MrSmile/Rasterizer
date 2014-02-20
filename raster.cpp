@@ -30,10 +30,11 @@ Polyline::Line::Line(const Point &pt0, const Point &pt1)
     a = r.y;  b = -r.x;  c = a * int64_t(pt0.x) + b * int64_t(pt0.y);
 
     uint32_t max_ab = max(absval(a), absval(b));
-    order = ilog2(max_ab);  max_ab <<= 31 - order;
+    int shift = 30 - ilog2(max_ab);  max_ab <<= shift + 1;
     scale = uint64_t(0x53333333) * uint32_t(max_ab * uint64_t(max_ab) >> 32) >> 32;
     scale += 0x8810624D - (uint64_t(0xBBC6A7EF) * max_ab >> 32);
     //scale = (uint64_t(1) << 61) / max_ab;
+    a <<= shift;  b <<= shift;  c <<= shift;
 }
 
 bool Polyline::add_line(const Point &pt0, const Point &pt1)
@@ -309,13 +310,12 @@ void Polyline::rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, 
         if(winding)flag ^= 1;  if(winding - 1)flag ^= 3;
         if(flag & 1)
         {
-            int32_t a = line[offs].a_norm(), b = line[offs].b_norm();
-            int64_t c = line[offs].c_norm();
+            int32_t a = line[offs].a, b = line[offs].b;  int64_t c = line[offs].c;
             if(flag & 2)
             {
                 a = -a;  b = -b;  c = -c;
             }
-            fill_halfplane(buf, width, height, stride, a, b, c);
+            fill_halfplane(buf, width, height, stride, a, b, c, line[offs].scale);
         }
         else fill_solid(buf, width, height, stride, flag & 2);
         line.pop_back();  return;

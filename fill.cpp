@@ -153,35 +153,38 @@ template<int res_ord> struct HalfplaneFiller<4, res_ord> : public HalfplaneFille
 template<int res_ord> struct HalfplaneFiller<5, res_ord> : public HalfplaneFillerSSE<4, res_ord> { };
 
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
-    void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
+    void fill_halfplane(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
-    static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
+    constexpr int max_ord = (x_ord > y_ord ? x_ord : y_ord) + 1;
+    static_assert(res_ord > max_ord, "int16_t overflow!");
 
-    int16_t aa = rounded_shift(a, res_ord + 14);
-    int16_t bb = rounded_shift(b, res_ord + 14);
-    int16_t cc = rounded_shift(2 * c - a - b, res_ord + 15) + (int16_t(1) << (15 - res_ord));
+    int16_t aa = rounded_shift(a * int64_t(scale), res_ord + 44);
+    int16_t bb = rounded_shift(b * int64_t(scale), res_ord + 44);
+    assert(!(absval(c >> (Polyline::pixel_order + max_ord)) & 0xFFFFFFFF80000000));
+    int16_t cc = rounded_shift(int32_t(c >> (Polyline::pixel_order + max_ord)) * int64_t(scale), res_ord - max_ord + 44);
+    cc += (int16_t(1) << (15 - res_ord)) - (int16_t(aa + bb) >> 1);
     int16_t delta = rounded_shift(min(absval(aa), absval(bb)), 2);
 
     HalfplaneFiller<x_ord, res_ord> filler;  filler.init(aa, delta);
     for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)filler.fill_line(buf, cc);
 }
 
-void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c)
+void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     assert(width > 0 && !(width & tile_mask) && height > 0 && !(height & tile_mask));
     if(width == tile_mask + 1 && height == tile_mask + 1)
     {
-        ::fill_halfplane<tile_order, tile_order>(buf, stride, a, b, c);  return;
+        ::fill_halfplane<tile_order, tile_order>(buf, stride, a, b, c, scale);  return;
     }
 
-    int64_t offs = (int64_t(a) + int64_t(b)) << (tile_order - 1);
-    int64_t size = int64_t(uint32_t(absval(a)) + uint32_t(absval(b))) << (tile_order - 1);
-    const ptrdiff_t step = 1 << tile_order;  width >>= tile_order;  height >>= tile_order;
+    int64_t offs = (int64_t(a) + int64_t(b)) << (pixel_order + tile_order - 1);
+    int64_t size = int64_t(uint32_t(absval(a)) + uint32_t(absval(b))) << (pixel_order + tile_order - 1);
+    constexpr ptrdiff_t step = 1 << tile_order;  width >>= tile_order;  height >>= tile_order;
     for(int j = 0; j < height; j++, buf += step * stride)
         for(int i = 0; i < width; i++)
         {
-            int64_t cc = c - a * int64_t(step * i) - b * int64_t(step * j);
-            if(absval(offs - cc) < size)::fill_halfplane<tile_order, tile_order>(buf + i * step, stride, a, b, cc);
+            int64_t cc = c - ((a * int64_t(i) + b * int64_t(j)) << (pixel_order + tile_order));
+            if(absval(offs - cc) < size)::fill_halfplane<tile_order, tile_order>(buf + i * step, stride, a, b, cc, scale);
             else ::fill_solid<tile_order, tile_order>(buf + i * step, stride, offs < cc);
         }
 }
@@ -320,7 +323,8 @@ template<int x_ord, int res_ord> struct ScanLineFiller : public ScanLineFillerBa
 template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2>
     void fill_generic(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
 {
-    static_assert(res_ord > x_ord + 1 && res_ord > y_ord + 1, "int16_t overflow!");
+    constexpr int max_ord = (x_ord > y_ord ? x_ord : y_ord) + 1;
+    static_assert(res_ord > max_ord, "int16_t overflow!");
 
     ScanLine<x_ord> res[1 << y_ord];
     ScanLineFiller<x_ord, res_ord> filler;
@@ -344,10 +348,11 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         delta[up + 1] += up_delta1;  delta[up] += (up_delta << Polyline::pixel_order) - up_delta1;
         if(line[i].y_min == line[i].y_max)continue;
 
-        int16_t a = line[i].a_norm(res_ord + 14);
-        int16_t b = line[i].b_norm(res_ord + 14);
-        int16_t c = line[i].c_norm(res_ord + 14) - (a >> 1) - b * dn;
-        filler.init(a, b);
+        int16_t a = rounded_shift(line[i].a * int64_t(line[i].scale), res_ord + 44);
+        int16_t b = rounded_shift(line[i].b * int64_t(line[i].scale), res_ord + 44);
+        assert(!(absval(line[i].c >> (Polyline::pixel_order + max_ord)) & 0xFFFFFFFF80000000));
+        int16_t c = rounded_shift(int32_t(line[i].c >> (Polyline::pixel_order + max_ord)) * int64_t(line[i].scale), res_ord - max_ord + 44);
+        c -= (a >> 1) + b * dn;  filler.init(a, b);
 
         if(dn_pos)
         {
