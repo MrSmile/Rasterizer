@@ -308,15 +308,8 @@ void Polyline::rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, 
     {
         int flag = 0;  if(line[offs].c < 0)winding++;
         if(winding)flag ^= 1;  if(winding - 1)flag ^= 3;
-        if(flag & 1)
-        {
-            int32_t a = line[offs].a, b = line[offs].b;  int64_t c = line[offs].c;
-            if(flag & 2)
-            {
-                a = -a;  b = -b;  c = -c;
-            }
-            fill_halfplane(buf, width, height, stride, a, b, c, line[offs].scale);
-        }
+        if(flag & 1)fill_halfplane(buf, width, height, stride,
+            line[offs].a, line[offs].b, line[offs].c, flag & 2 ? -line[offs].scale : line[offs].scale);
         else fill_solid(buf, width, height, stride, flag & 2);
         line.pop_back();  return;
     }

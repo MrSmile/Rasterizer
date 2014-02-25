@@ -185,7 +185,7 @@ void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t str
         {
             int64_t cc = c - ((a * int64_t(i) + b * int64_t(j)) << (pixel_order + tile_order));
             if(absval(offs - cc) < size)::fill_halfplane<tile_order, tile_order>(buf + i * step, stride, a, b, cc, scale);
-            else ::fill_solid<tile_order, tile_order>(buf + i * step, stride, offs < cc);
+            else ::fill_solid<tile_order, tile_order>(buf + i * step, stride, (int32_t((offs - cc) >> 32) ^ scale) & (int32_t(1) << 31));
         }
 }
 
