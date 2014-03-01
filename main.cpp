@@ -10,6 +10,8 @@
 
 using namespace std;
 
+#define PURE_C
+
 
 
 void print_outline(const FT_Outline &path)
@@ -40,27 +42,40 @@ bool write_image(const char *file, const uint8_t *img, unsigned width, unsigned 
     return !png_close_file(&png) && res;
 }
 
-void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
+int test_c_rasterizer()
 {
-    /*
     Rasterizer rst;
     rasterizer_init(&rst);
-    for(size_t i = 0; i < n_outlines; i++)
-    {
-        rasterizer_set_outline(&rst, &outline[i]);
-    }
-    rasterizer_done(&rst);
-    */
 
+    const int w = 64, h = 64;
+    uint8_t bitmap[w * h] alignas(16);
+    int res = rasterizer_test(&rst, bitmap);
+    rasterizer_done(&rst);  if(!res)return -1;
+    print_bitmap(bitmap, w, h, w);  return 0;
+}
+
+void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
+{
     ptrdiff_t stride = width * n_outlines;
     vector<uint8_t> image(3 * height * stride);
+    uint8_t *buf = image.data();
 
-    Polyline poly;  uint8_t *buf = image.data();
+#ifdef PURE_C
+    Rasterizer rst;  rasterizer_init(&rst);
+    for(size_t i = 0; i < n_outlines; i++, buf += width)
+    {
+        rasterizer_set_outline(&rst, &outline[i]);
+        if(!rasterizer_fill(&rst, buf, 0, 0, width, height, stride, 1))exit(-1);
+    }
+    rasterizer_done(&rst);
+#else
+    Polyline poly;
     for(size_t i = 0; i < n_outlines; i++, buf += width)
     {
         poly.create(outline[i]);
         poly.rasterize(buf, 0, 0, width, height, stride);
     }
+#endif
 
     FT_Bitmap bm;  bm.rows = height;  bm.width = width;
     bm.pitch = stride;  bm.buffer = image.data() + height * stride;
@@ -83,12 +98,22 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
 
     clock_t tm0 = clock();
 
+#ifdef PURE_C
+    Rasterizer rst;  rasterizer_init(&rst);
+    for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
+    {
+        rasterizer_set_outline(&rst, &outline[i]);
+        if(!rasterizer_fill(&rst, image.data(), 0, 0, width, height, width, 1))exit(-1);
+    }
+    rasterizer_done(&rst);
+#else
     Polyline poly;
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         poly.create(outline[i]);
         poly.rasterize(image.data(), 0, 0, width, height, width);
     }
+#endif
 
     clock_t tm1 = clock();
 
@@ -108,6 +133,8 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
 int main()
 {
     //Polyline().test();  return 0;
+    //return test_c_rasterizer();
+
 
     if(png_init(0, 0))
     {
