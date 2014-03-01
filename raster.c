@@ -375,7 +375,7 @@ static int polyline_split_horz(const struct Segment *src, size_t n_src, struct S
     for(; src != end; src++)
     {
         int delta = 0;
-        if(!src->y_min && (src->flags & SEGFLAG_EXACT_BOTTOM))delta = 1 - ((2 * src->flags) & 2);  // TODO: a sign
+        if(!src->y_min && (src->flags & SEGFLAG_EXACT_BOTTOM))delta = src->a < 0 ? 1 : -1;
         if(segment_check_right(src, x))
         {
             winding += delta;  if(src->x_min >= x)continue;  **dst0 = *src;
@@ -401,7 +401,7 @@ static int polyline_split_vert(const struct Segment *src, size_t n_src, struct S
     for(; src != end; src++)
     {
         int delta = 0;
-        if(!src->x_min && (src->flags & SEGFLAG_EXACT_LEFT))delta = 1 - ((3 * src->flags) & 2);  // TODO: b sign
+        if(!src->x_min && (src->flags & SEGFLAG_EXACT_LEFT))delta = src->b < 0 ? 1 : -1;
         if(segment_check_top(src, y))
         {
             winding += delta;  if(src->y_min >= y)continue;  **dst0 = *src;

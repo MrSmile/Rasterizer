@@ -87,12 +87,12 @@ public:
 
         int delta_horz() const
         {
-            return is_split_y() ? 1 - ((2 * flags) & 2) : 0;  // TODO: a sign
+            return is_split_y() ? (a < 0 ? 1 : -1) : 0;
         }
 
         int delta_vert() const
         {
-            return is_split_x() ? 1 - ((3 * flags) & 2) : 0;  // TODO: b sign
+            return is_split_x() ? (b < 0 ? 1 : -1) : 0;
         }
 
         bool check_l(int32_t x) const
