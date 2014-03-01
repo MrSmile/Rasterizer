@@ -1,8 +1,7 @@
 // fill.c : low-level rasterization
 //
 
-#include <stddef.h>
-#include <stdint.h>
+#include "fill.h"
 
 
 void fill_halfplane_tile16(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)

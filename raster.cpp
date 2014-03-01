@@ -23,8 +23,8 @@ bool Polyline::Segment::subdivide(const Point &p)
 Polyline::Line::Line(const Point &pt0, const Point &pt1)
 {
     Point r = pt1 - pt0;
-    flags = f_exact_l | f_exact_r | f_exact_d | f_exact_u;
-    if(r.x < 0)flags ^= f_ur_dl;  if(r.y >= 0)flags ^= f_up | f_ur_dl;
+    flags = SEGFLAG_EXACT_LEFT | SEGFLAG_EXACT_RIGHT | SEGFLAG_EXACT_BOTTOM | SEGFLAG_EXACT_TOP;
+    if(r.x < 0)flags ^= SEGFLAG_UR_DL;  if(r.y >= 0)flags ^= SEGFLAG_UP | SEGFLAG_UR_DL;
     x_min = min(pt0.x, pt1.x);  x_max = max(pt0.x, pt1.x);
     y_min = min(pt0.y, pt1.y);  y_max = max(pt0.y, pt1.y);
     a = r.y;  b = -r.x;  c = a * int64_t(pt0.x) + b * int64_t(pt0.y);
@@ -220,13 +220,13 @@ uint8_t Polyline::calc_pixel(std::vector<Line> &line, size_t offs, int winding)
 void Polyline::Line::move_x(int32_t x)
 {
     x_min = max<int32_t>(0, x_min - x);  x_max -= x;  c -= a * int64_t(x);
-    if(is_split_x() && is_ur_dl())flags &= ~f_exact_d;
+    if(is_split_x() && is_ur_dl())flags &= ~SEGFLAG_EXACT_BOTTOM;
 }
 
 void Polyline::Line::move_y(int32_t y)
 {
     y_min = max<int32_t>(0, y_min - y);  y_max -= y;  c -= b * int64_t(y);
-    if(is_split_y() && is_ur_dl())flags &= ~f_exact_l;
+    if(is_split_y() && is_ur_dl())flags &= ~SEGFLAG_EXACT_LEFT;
 }
 
 void Polyline::Line::split_horz(int32_t x, Line &next)
@@ -235,9 +235,9 @@ void Polyline::Line::split_horz(int32_t x, Line &next)
     next = *this;  next.c -= a * int64_t(x);
     next.x_min = 0;  next.x_max -= x;  x_max = x;
 
-    flags &= ~f_exact_d;  next.flags &= ~f_exact_u;
-    if(flags & f_ur_dl)swap(flags, next.flags);
-    flags |= f_exact_r;  next.flags |= f_exact_l;
+    flags &= ~SEGFLAG_EXACT_BOTTOM;  next.flags &= ~SEGFLAG_EXACT_TOP;
+    if(flags & SEGFLAG_UR_DL)swap(flags, next.flags);
+    flags |= SEGFLAG_EXACT_RIGHT;  next.flags |= SEGFLAG_EXACT_LEFT;
 }
 
 void Polyline::Line::split_vert(int32_t y, Line &next)
@@ -246,9 +246,9 @@ void Polyline::Line::split_vert(int32_t y, Line &next)
     next = *this;  next.c -= b * int64_t(y);
     next.y_min = 0;  next.y_max -= y;  y_max = y;
 
-    flags &= ~f_exact_l;  next.flags &= ~f_exact_r;
-    if(flags & f_ur_dl)swap(flags, next.flags);
-    flags |= f_exact_u;  next.flags |= f_exact_d;
+    flags &= ~SEGFLAG_EXACT_LEFT;  next.flags &= ~SEGFLAG_EXACT_RIGHT;
+    if(flags & SEGFLAG_UR_DL)swap(flags, next.flags);
+    flags |= SEGFLAG_EXACT_TOP;  next.flags |= SEGFLAG_EXACT_BOTTOM;
 }
 
 int Polyline::split_horz(const vector<Line> &src, size_t offs, vector<Line> &dst0, vector<Line> &dst1, int32_t x)

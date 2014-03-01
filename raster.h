@@ -3,6 +3,11 @@
 
 #pragma once
 
+extern "C"
+{
+#include "fill.h"
+}
+
 #include "point.h"
 #include <algorithm>
 #include <vector>
@@ -55,76 +60,66 @@ public:
         bool subdivide(const Point &p);
     };
 
-    struct Line
+    struct Line : public ::Segment
     {
-        enum Flags  // TODO: better enum
-        {
-            f_up = 1, f_ur_dl = 2, f_exact_l = 4, f_exact_r = 8, f_exact_d = 16, f_exact_u = 32
-        };
-
-        uint8_t flags;
-        int32_t x_min, x_max, y_min, y_max;
-        int32_t a, b, scale;
-        int64_t c;
-
         Line() = default;
         Line(const Point &pt0, const Point &pt1);
 
         bool is_up() const
         {
-            return flags & f_up;
+            return flags & SEGFLAG_UP;
         }
 
         bool is_ur_dl() const
         {
-            return flags & f_ur_dl;
+            return flags & SEGFLAG_UR_DL;
         }
 
         bool is_split_x() const
         {
-            return !x_min && (flags & f_exact_l);
+            return !x_min && (flags & SEGFLAG_EXACT_LEFT);
         }
 
         bool is_split_y() const
         {
-            return !y_min && (flags & f_exact_d);
+            return !y_min && (flags & SEGFLAG_EXACT_BOTTOM);
         }
 
         int delta_horz() const
         {
-            return is_split_y() ? 1 - ((2 * flags) & 2) : 0;
+            return is_split_y() ? 1 - ((2 * flags) & 2) : 0;  // TODO: a sign
         }
 
         int delta_vert() const
         {
-            return is_split_x() ? 1 - ((3 * flags) & 2) : 0;
+            return is_split_x() ? 1 - ((3 * flags) & 2) : 0;  // TODO: b sign
         }
 
         bool check_l(int32_t x) const
         {
-            if(flags & f_exact_l)return x_min >= x;
-            int64_t cc = c - a * int64_t(x) - b * int64_t(flags & f_ur_dl ? y_min : y_max);
+            if(flags & SEGFLAG_EXACT_LEFT)return x_min >= x;
+            int64_t cc = c - a * int64_t(x) - b * int64_t(flags & SEGFLAG_UR_DL ? y_min : y_max);
             if(a < 0)cc = -cc;  return cc >= 0;
         }
 
         bool check_r(int32_t x) const
         {
-            if(flags & f_exact_r)return x_max <= x;
-            int64_t cc = c - a * int64_t(x) - b * int64_t(flags & f_ur_dl ? y_max : y_min);
+            if(flags & SEGFLAG_EXACT_RIGHT)return x_max <= x;
+            int64_t cc = c - a * int64_t(x) - b * int64_t(flags & SEGFLAG_UR_DL ? y_max : y_min);
             if(a > 0)cc = -cc;  return cc >= 0;
         }
 
         bool check_d(int32_t y) const
         {
-            if(flags & f_exact_d)return y_min >= y;
-            int64_t cc = c - b * int64_t(y) - a * int64_t(flags & f_ur_dl ? x_min : x_max);
+            if(flags & SEGFLAG_EXACT_BOTTOM)return y_min >= y;
+            int64_t cc = c - b * int64_t(y) - a * int64_t(flags & SEGFLAG_UR_DL ? x_min : x_max);
             if(b < 0)cc = -cc;  return cc >= 0;
         }
 
         bool check_u(int32_t y) const
         {
-            if(flags & f_exact_u)return y_max <= y;
-            int64_t cc = c - b * int64_t(y) - a * int64_t(flags & f_ur_dl ? x_max : x_min);
+            if(flags & SEGFLAG_EXACT_TOP)return y_max <= y;
+            int64_t cc = c - b * int64_t(y) - a * int64_t(flags & SEGFLAG_UR_DL ? x_max : x_min);
             if(b > 0)cc = -cc;  return cc >= 0;
         }
 
