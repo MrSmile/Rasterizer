@@ -88,10 +88,27 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
         for(int i = 0; i < 1 << x_ord; i++)buf[i] = value;
 }
 
+template<> void fill_solid<4, 4>(uint8_t *buf, ptrdiff_t stride, bool set)
+{
+    fill_solid_tile16(buf, stride, set);
+}
+
+template<> void fill_solid<5, 5>(uint8_t *buf, ptrdiff_t stride, bool set)
+{
+    fill_solid_tile32(buf, stride, set);
+}
+
 void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set)
 {
+    assert(!(width & tile_mask) && !(height & tile_mask));
+    width >>= tile_order;  height >>= tile_order;
+    for(int j = 0; j < height; j++, buf += stride << tile_order)for(int i = 0; i < width; i++)
+        ::fill_solid<tile_order, tile_order>(buf + (i << tile_order), stride, set);
+
+    /*
     assert(width > 0 && !(width & 15) && height > 0);
     fill_solid_line16(buf, width >> 4, height, stride, set);
+    */
 
     /*
     uint8_t value = set ? 255 : 0;

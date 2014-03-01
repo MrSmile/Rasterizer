@@ -5,6 +5,24 @@
 #include <assert.h>
 
 
+
+void fill_solid_tile16(uint8_t *buf, ptrdiff_t stride, int set)
+{
+    int i, j;
+    int8_t value = set ? 255 : 0;
+    for(j = 0; j < 16; j++, buf += stride)
+        for(i = 0; i < 16; i++)buf[i] = value;
+}
+
+void fill_solid_tile32(uint8_t *buf, ptrdiff_t stride, int set)
+{
+    int i, j;
+    int8_t value = set ? 255 : 0;
+    for(j = 0; j < 32; j++, buf += stride)
+        for(i = 0; i < 32; i++)buf[i] = value;
+}
+
+
 void fill_halfplane_tile16(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     int16_t aa = (a * (int64_t)scale + ((int64_t)1 << 49)) >> 50;

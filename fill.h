@@ -22,6 +22,9 @@ struct Segment
 };
 
 
+void fill_solid_tile16(uint8_t *buf, ptrdiff_t stride, int set);
+void fill_solid_tile32(uint8_t *buf, ptrdiff_t stride, int set);
+
 void fill_halfplane_tile16(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_halfplane_tile32(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 
