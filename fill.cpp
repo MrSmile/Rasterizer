@@ -88,16 +88,6 @@ template<int x_ord, int y_ord> void fill_solid(uint8_t *buf, ptrdiff_t stride, b
         for(int i = 0; i < 1 << x_ord; i++)buf[i] = value;
 }
 
-template<> void fill_solid<4, 4>(uint8_t *buf, ptrdiff_t stride, bool set)
-{
-    fill_solid_tile16(buf, stride, set);
-}
-
-template<> void fill_solid<5, 5>(uint8_t *buf, ptrdiff_t stride, bool set)
-{
-    fill_solid_tile32(buf, stride, set);
-}
-
 void Polyline::fill_solid(uint8_t *buf, int width, int height, ptrdiff_t stride, bool set)
 {
     assert(!(width & tile_mask) && !(height & tile_mask));
@@ -184,16 +174,6 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
 
     HalfplaneFiller<x_ord, res_ord> filler;  filler.init(aa, delta);
     for(int j = 0; j < 1 << y_ord; j++, buf += stride, cc -= bb)filler.fill_line(buf, cc);
-}
-
-template<> void fill_halfplane<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
-{
-    fill_halfplane_tile16(buf, stride, a, b, c, scale);
-}
-
-template<> void fill_halfplane<5, 5, 7>(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
-{
-    fill_halfplane_tile32(buf, stride, a, b, c, scale);
 }
 
 void Polyline::fill_halfplane(uint8_t *buf, int width, int height, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
@@ -397,16 +377,6 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
     int16_t cur = 256 * winding;
     for(int j = 0; j < 1 << y_ord; j++, buf += stride)
         res[j].fill_line(buf, cur += delta[j]);
-}
-
-template<> void fill_generic<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
-{
-    fill_generic_tile16(buf, stride, static_cast<const ::Segment *>(line), n_lines, winding);
-}
-
-template<> void fill_generic<5, 5, 7>(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
-{
-    fill_generic_tile32(buf, stride, static_cast<const ::Segment *>(line), n_lines, winding);
 }
 
 void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, Line *line, size_t size, int winding)
