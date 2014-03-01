@@ -42,6 +42,16 @@ bool write_image(const char *file, const uint8_t *img, unsigned width, unsigned 
 
 void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
 {
+    /*
+    Rasterizer rst;
+    rasterizer_init(&rst);
+    for(size_t i = 0; i < n_outlines; i++)
+    {
+        rasterizer_set_outline(&rst, &outline[i]);
+    }
+    rasterizer_done(&rst);
+    */
+
     ptrdiff_t stride = width * n_outlines;
     vector<uint8_t> image(3 * height * stride);
 

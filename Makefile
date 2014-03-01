@@ -1,18 +1,24 @@
 
 SOURCE = raster.cpp fill.cpp main.cpp
 HEADER = point.h raster.h
-FLAGS = -std=c++11 -I/usr/include/freetype2 -fno-exceptions -Wall -Wno-parentheses
+FLAGS = -I/usr/include/freetype2 -Wall
+CFLAGS = -std=c99 $(FLAGS)
+CXXFLAGS = -std=c++11 -fno-exceptions -Wno-parentheses $(FLAGS)
+DFLAGS = -g -O0 -DDEBUG
+RFLAGS = -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG
 LIBS = -lfreetype -lpnglite -lz
 PROGRAM = raster
 
 
 debug: $(SOURCE) $(HEADER)
-	gcc -g -O0 -DDEBUG -Wall fill.c -c -o fill.o
-	g++ -g -O0 -DDEBUG $(FLAGS) $(SOURCE) fill.o $(LIBS) -o $(PROGRAM)
+	gcc $(DFLAGS) $(CFLAGS) fill.c -c -o fill.o
+	gcc $(DFLAGS) $(CFLAGS) raster.c -c -o raster.o
+	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
-	gcc -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG -Wall fill.c -c -o fill.o
-	g++ -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG $(FLAGS) $(SOURCE) fill.o $(LIBS) -o $(PROGRAM)
+	gcc $(RFLAGS) $(CFLAGS) fill.c -c -o fill.o
+	gcc $(RFLAGS) $(CFLAGS) raster.c -c -o raster.o
+	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o $(LIBS) -o $(PROGRAM)
 
 clean:
-	rm $(PROGRAM) fill.o
+	rm $(PROGRAM) fill.o raster.o
