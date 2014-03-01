@@ -382,6 +382,16 @@ template<int x_ord, int y_ord, int res_ord = (x_ord > y_ord ? x_ord : y_ord) + 2
         res[j].fill_line(buf, cur += delta[j]);
 }
 
+template<> void fill_generic<4, 4, 6>(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
+{
+    fill_generic_tile16(buf, stride, static_cast<const ::Segment *>(line), n_lines, winding);
+}
+
+template<> void fill_generic<5, 5, 7>(uint8_t *buf, ptrdiff_t stride, const Polyline::Line *line, size_t n_lines, int winding)
+{
+    fill_generic_tile32(buf, stride, static_cast<const ::Segment *>(line), n_lines, winding);
+}
+
 void Polyline::fill_generic(uint8_t *buf, int width, int height, ptrdiff_t stride, Line *line, size_t size, int winding)
 {
     assert(width == tile_mask + 1 && height == tile_mask + 1);
