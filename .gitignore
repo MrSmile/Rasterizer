@@ -1,2 +1,3 @@
+*.o
 raster
 output.png

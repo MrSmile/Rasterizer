@@ -7,10 +7,12 @@ PROGRAM = raster
 
 
 debug: $(SOURCE) $(HEADER)
-	g++ -g -O0 -DDEBUG $(FLAGS) $(SOURCE) $(LIBS) -o $(PROGRAM)
+	gcc -g -O0 -DDEBUG -Wall fill.c -c -o fill.o
+	g++ -g -O0 -DDEBUG $(FLAGS) $(SOURCE) fill.o $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
-	g++ -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG $(FLAGS) $(SOURCE) $(LIBS) -o $(PROGRAM)
+	gcc -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG -Wall fill.c -c -o fill.o
+	g++ -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG $(FLAGS) $(SOURCE) fill.o $(LIBS) -o $(PROGRAM)
 
 clean:
-	rm $(PROGRAM)
+	rm $(PROGRAM) fill.o
