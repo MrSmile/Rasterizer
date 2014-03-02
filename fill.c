@@ -6,7 +6,7 @@
 
 
 
-void fill_solid_tile16(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride, int set)
 {
     int i, j;
     int8_t value = set ? 255 : 0;
@@ -14,7 +14,7 @@ void fill_solid_tile16(uint8_t *buf, ptrdiff_t stride, int set)
         for(i = 0; i < 16; i++)buf[i] = value;
 }
 
-void fill_solid_tile32(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride, int set)
 {
     int i, j;
     int8_t value = set ? 255 : 0;
@@ -23,7 +23,7 @@ void fill_solid_tile32(uint8_t *buf, ptrdiff_t stride, int set)
 }
 
 
-void fill_halfplane_tile16(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
+void fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     int16_t aa = (a * (int64_t)scale + ((int64_t)1 << 49)) >> 50;
     int16_t bb = (b * (int64_t)scale + ((int64_t)1 << 49)) >> 50;
@@ -50,7 +50,7 @@ void fill_halfplane_tile16(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b,
     }
 }
 
-void fill_halfplane_tile32(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
+void fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     int16_t aa = (a * (int64_t)scale + ((int64_t)1 << 50)) >> 51;
     int16_t bb = (b * (int64_t)scale + ((int64_t)1 << 50)) >> 51;
@@ -102,7 +102,7 @@ static inline void update_border_line16(int16_t res[16], int16_t a, int16_t abs_
     }
 }
 
-void fill_generic_tile16(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
 {
     int i, j;
     int16_t res[16][16], delta[18];
@@ -201,7 +201,7 @@ static inline void update_border_line32(int16_t res[32], int16_t a, int16_t abs_
     }
 }
 
-void fill_generic_tile32(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
 {
     int i, j;
     int16_t res[32][32], delta[34];

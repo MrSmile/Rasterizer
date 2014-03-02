@@ -12,6 +12,37 @@ static inline int ilog2(uint32_t n)
 }
 
 
+static const int use_tile16 = 1;
+
+void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride, int set);
+void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride, int set);
+void fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
+void fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
+void fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
+void fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
+
+void rasterizer_init(struct Rasterizer *rst)
+{
+    if(use_tile16)
+    {
+        rst->tile_order = 4;
+        rst->fill_solid = fill_solid_tile16_c;
+        rst->fill_halfplane = fill_halfplane_tile16_c;
+        rst->fill_generic = fill_generic_tile16_c;
+    }
+    else
+    {
+        rst->tile_order = 5;
+        rst->fill_solid = fill_solid_tile32_c;
+        rst->fill_halfplane = fill_halfplane_tile32_c;
+        rst->fill_generic = fill_generic_tile32_c;
+    }
+
+    rst->linebuf[0] = rst->linebuf[1] = NULL;
+    rst->size[0] = rst->capacity[0] = 0;
+    rst->size[1] = rst->capacity[1] = 0;
+}
+
 static inline int check_capacity(struct Rasterizer *rst, int index, size_t delta)
 {
     delta += rst->size[index];
@@ -26,25 +57,6 @@ static inline int check_capacity(struct Rasterizer *rst, int index, size_t delta
     rst->linebuf[index] = (struct Segment *)ptr;
     rst->capacity[index] = capacity;
     return 1;
-}
-
-void rasterizer_init(struct Rasterizer *rst)
-{
-#if 1
-    rst->tile_order = 4;
-    rst->fill_solid = fill_solid_tile16;
-    rst->fill_halfplane = fill_halfplane_tile16;
-    rst->fill_generic = fill_generic_tile16;
-#else
-    rst->tile_order = 5;
-    rst->fill_solid = fill_solid_tile32;
-    rst->fill_halfplane = fill_halfplane_tile32;
-    rst->fill_generic = fill_generic_tile32;
-#endif
-
-    rst->linebuf[0] = rst->linebuf[1] = NULL;
-    rst->size[0] = rst->capacity[0] = 0;
-    rst->size[1] = rst->capacity[1] = 0;
 }
 
 void rasterizer_done(struct Rasterizer *rst)
