@@ -57,7 +57,7 @@ int test_c_rasterizer()
 void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
 {
     ptrdiff_t stride = width * n_outlines;
-    vector<uint8_t> image(3 * height * stride);
+    vector<uint8_t> image(3 * height * stride, 0);
     uint8_t *buf = image.data();
 
 #ifdef PURE_C

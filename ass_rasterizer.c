@@ -479,6 +479,7 @@ static int polyline_split_vert(const struct Segment *src, size_t n_src, struct S
 static inline void rasterizer_fill_solid(struct Rasterizer *rst,
     uint8_t *buf, int width, int height, ptrdiff_t stride, int set)
 {
+    if(!set)return;  // buf already filled with zeros
     assert(!(width & ((1 << rst->tile_order) - 1)) && !(height & ((1 << rst->tile_order) - 1)));
 
     int i, j;
@@ -512,7 +513,8 @@ static inline void rasterizer_fill_halfplane(struct Rasterizer *rst,
             int64_t cc = c - ((a * (int64_t)i + b * (int64_t)j) << (rst->tile_order + 6));
             int64_t offs_c = offs - cc, abs_cc = offs_c < 0 ? -offs_c : offs_c;
             if(abs_cc < size)rst->fill_halfplane(buf + i * step, stride, a, b, cc, scale);
-            else rst->fill_solid(buf + i * step, stride, ((int32_t)(offs_c >> 32) ^ scale) & (1 << 31));
+            else if(((int32_t)(offs_c >> 32) ^ scale) & (1 << 31))  // buf already filled with zeros
+                rst->fill_solid(buf + i * step, stride, 1);
         }
 }
 
