@@ -11,16 +11,16 @@ PROGRAM = raster
 
 
 debug: $(SOURCE) $(HEADER)
-	gcc $(DFLAGS) $(CFLAGS) fill.c -c -o fill.o
-	gcc $(DFLAGS) $(CFLAGS) fill_sse2.c -c -o fill_sse2.o
-	gcc $(DFLAGS) $(CFLAGS) raster.c -c -o raster.o
-	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o fill_sse2.o $(LIBS) -o $(PROGRAM)
+	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer.c -c -o ass_rasterizer.o
+	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer_c.c -c -o ass_rasterizer_c.o
+	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer_sse2.c -c -o ass_rasterizer_sse2.o
+	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
-	gcc $(RFLAGS) $(CFLAGS) fill.c -c -o fill.o
-	gcc $(RFLAGS) $(CFLAGS) fill_sse2.c -c -o fill_sse2.o
-	gcc $(RFLAGS) $(CFLAGS) raster.c -c -o raster.o
-	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o fill_sse2.o $(LIBS) -o $(PROGRAM)
+	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer.c -c -o ass_rasterizer.o
+	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer_c.c -c -o ass_rasterizer_c.o
+	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer_sse2.c -c -o ass_rasterizer_sse2.o
+	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o $(LIBS) -o $(PROGRAM)
 
 clean:
-	rm $(PROGRAM) fill.o raster.o
+	rm $(PROGRAM) *.o

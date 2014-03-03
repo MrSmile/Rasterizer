@@ -5,7 +5,7 @@
 
 extern "C"
 {
-#include "fill.h"
+#include "ass_rasterizer.h"
 }
 
 #include "point.h"
