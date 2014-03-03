@@ -12,13 +12,15 @@ PROGRAM = raster
 
 debug: $(SOURCE) $(HEADER)
 	gcc $(DFLAGS) $(CFLAGS) fill.c -c -o fill.o
+	gcc $(DFLAGS) $(CFLAGS) fill_sse2.c -c -o fill_sse2.o
 	gcc $(DFLAGS) $(CFLAGS) raster.c -c -o raster.o
-	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o $(LIBS) -o $(PROGRAM)
+	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o fill_sse2.o $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
 	gcc $(RFLAGS) $(CFLAGS) fill.c -c -o fill.o
+	gcc $(RFLAGS) $(CFLAGS) fill_sse2.c -c -o fill_sse2.o
 	gcc $(RFLAGS) $(CFLAGS) raster.c -c -o raster.o
-	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o $(LIBS) -o $(PROGRAM)
+	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) raster.o fill.o fill_sse2.o $(LIBS) -o $(PROGRAM)
 
 clean:
 	rm $(PROGRAM) fill.o raster.o
