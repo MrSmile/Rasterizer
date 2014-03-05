@@ -21,18 +21,18 @@
 
 
 
-void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride)
 {
     int i, j;
-    int8_t value = set ? 255 : 0;
+    int8_t value = 255;
     for(j = 0; j < 16; j++, buf += stride)
         for(i = 0; i < 16; i++)buf[i] = value;
 }
 
-void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride)
 {
     int i, j;
-    int8_t value = set ? 255 : 0;
+    int8_t value = 255;
     for(j = 0; j < 32; j++, buf += stride)
         for(i = 0; i < 32; i++)buf[i] = value;
 }

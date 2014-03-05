@@ -40,7 +40,7 @@ struct Segment
 };
 
 
-typedef void (*FillSolidTileFunc)(uint8_t *buf, ptrdiff_t stride, int set);
+typedef void (*FillSolidTileFunc)(uint8_t *buf, ptrdiff_t stride);
 typedef void (*FillHalfplaneTileFunc)(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 typedef void (*FillGenericTileFunc)(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
 

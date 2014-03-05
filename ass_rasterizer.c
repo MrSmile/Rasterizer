@@ -30,15 +30,15 @@ static inline int ilog2(uint32_t n)
 static const int use_sse2 = 1;
 static const int use_tile16 = 1;
 
-void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride, int set);
-void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride, int set);
+void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride);
+void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride);
 void fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
 void fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
 
-void fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int set);
-void fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int set);
+void fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride);
+void fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride);
 void fill_halfplane_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
@@ -477,9 +477,8 @@ static int polyline_split_vert(const struct Segment *src, size_t n_src, struct S
 
 
 static inline void rasterizer_fill_solid(struct Rasterizer *rst,
-    uint8_t *buf, int width, int height, ptrdiff_t stride, int set)
+    uint8_t *buf, int width, int height, ptrdiff_t stride)
 {
-    if(!set)return;  // buf already filled with zeros
     assert(!(width & ((1 << rst->tile_order) - 1)) && !(height & ((1 << rst->tile_order) - 1)));
 
     int i, j;
@@ -487,7 +486,7 @@ static inline void rasterizer_fill_solid(struct Rasterizer *rst,
     ptrdiff_t tile_stride = stride << rst->tile_order;
     width >>= rst->tile_order;  height >>= rst->tile_order;
     for(j = 0; j < height; j++, buf += tile_stride)for(i = 0; i < width; i++)
-        rst->fill_solid(buf + i * step, stride, set);
+        rst->fill_solid(buf + i * step, stride);
 }
 
 static inline void rasterizer_fill_halfplane(struct Rasterizer *rst,
@@ -513,8 +512,8 @@ static inline void rasterizer_fill_halfplane(struct Rasterizer *rst,
             int64_t cc = c - ((a * (int64_t)i + b * (int64_t)j) << (rst->tile_order + 6));
             int64_t offs_c = offs - cc, abs_cc = offs_c < 0 ? -offs_c : offs_c;
             if(abs_cc < size)rst->fill_halfplane(buf + i * step, stride, a, b, cc, scale);
-            else if(((int32_t)(offs_c >> 32) ^ scale) & (1 << 31))  // buf already filled with zeros
-                rst->fill_solid(buf + i * step, stride, 1);
+            else if(((int32_t)(offs_c >> 32) ^ scale) & (1 << 31))
+                rst->fill_solid(buf + i * step, stride);
         }
 }
 
@@ -528,7 +527,7 @@ static int rasterizer_fill_level(struct Rasterizer *rst,
     struct Segment *line = rst->linebuf[index] + offs;
     if(!n)
     {
-        rasterizer_fill_solid(rst, buf, width, height, stride, winding);  return 1;
+        if(winding)rasterizer_fill_solid(rst, buf, width, height, stride);  return 1;
     }
     if(n == 1)
     {
@@ -536,7 +535,7 @@ static int rasterizer_fill_level(struct Rasterizer *rst,
         if(winding)flag ^= 1;  if(winding - 1)flag ^= 3;
         if(flag & 1)rasterizer_fill_halfplane(rst, buf, width, height, stride,
             line->a, line->b, line->c, flag & 2 ? -line->scale : line->scale);
-        else rasterizer_fill_solid(rst, buf, width, height, stride, flag & 2);
+        else if(flag & 2)rasterizer_fill_solid(rst, buf, width, height, stride);
         rst->size[index] = offs;  return 1;
     }
     if(width == 1 << rst->tile_order && height == 1 << rst->tile_order)

@@ -32,18 +32,18 @@ static const int16_t index_x8_internal[][8] __attribute__ ((aligned(16))) =
 static const __m128i *index_x8 = (const __m128i *)index_x8_internal;
 
 
-void fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride)
 {
     int j;
-    __m128i value = set ? _mm_set1_epi8(255) : _mm_set1_epi8(0);
+    __m128i value = _mm_set1_epi8(255);
     for(j = 0; j < 16; j++, buf += stride)
         *(__m128i *)buf = value;
 }
 
-void fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int set)
+void fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride)
 {
     int j;
-    __m128i value = set ? _mm_set1_epi8(255) : _mm_set1_epi8(0);
+    __m128i value = _mm_set1_epi8(255);
     for(j = 0; j < 16; j++, buf += stride)
     {
         ((__m128i *)buf)[0] = value;
@@ -131,7 +131,8 @@ void fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32
 }
 
 
-static inline void update_border_line16(__m128i res[2], int16_t a, int16_t abs_a, const __m128i va[2], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
+static inline void update_border_line16(__m128i res[2],
+    int16_t a, int16_t abs_a, const __m128i va[2], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
 {
     int16_t size = (up - dn) << 1, offs = size >> 1;
     int16_t w = (1 << 13) + (size << 6) - (abs_a << 3);
@@ -242,7 +243,8 @@ void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
     }
 }
 
-static inline void update_border_line32(__m128i res[4], int16_t a, int16_t abs_a, const __m128i va[4], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
+static inline void update_border_line32(__m128i res[4],
+    int16_t a, int16_t abs_a, const __m128i va[4], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
 {
     int16_t size = (up - dn) << 1, offs = size >> 1;
     int16_t w = (1 << 14) + (size << 7) - (abs_a << 5);
