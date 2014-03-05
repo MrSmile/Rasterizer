@@ -25,8 +25,8 @@ SECTION_RODATA 32
 
 bcast_word: db 0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1
 words_index: dw 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F
-words_1023: dw 1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023
-words_511: dw 511,511,511,511,511,511,511,511,511,511,511,511,511,511,511,511
+words_tile16: dw 1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023,1023
+words_tile32: dw 511,511,511,511,511,511,511,511,511,511,511,511,511,511,511,511
 
 SECTION .text
 
@@ -61,7 +61,9 @@ cglobal fill_solid_tile32, 2,2,1
     RET
 
 
-; src, delta, zero, full, dst, tmp, shift
+;------------------------------------------------------------------------------
+; CALC_LINE src, delta, zero, full, dst, tmp, shift
+;------------------------------------------------------------------------------
 %macro CALC_LINE 7
     movaps xmm%5, xmm%1
     movaps xmm%6, xmm%5
@@ -75,171 +77,95 @@ cglobal fill_solid_tile32, 2,2,1
 %endmacro
 
 ;------------------------------------------------------------------------------
-; void fill_halfplane_tile16( uint8_t *buf, ptrdiff_t stride,
+; FILL_HALFPLANE_TILE tile_order, suffix
+; void fill_halfplane_tile%2( uint8_t *buf, ptrdiff_t stride,
 ;                             int32_t a, int32_t b, int64_t c, int32_t scale );
 ;------------------------------------------------------------------------------
 
-cglobal fill_halfplane_tile16, 6,7,9
-    movsxd r2, r2d  ; a
-    movsxd r3, r3d  ; b
-    sar r4, 11  ; c >> 11
-    movsxd r5, r5d  ; scale
-    mov r6, 1 << 49
-    imul r2, r5
-    add r2, r6
-    sar r2, 50  ; aa
-    imul r3, r5
-    add r3, r6
-    sar r3, 50  ; bb
-    imul r4, r5
-    shr r6, 5
-    add r4, r6
-    sar r4, 45  ; cc
-    add r4d, 1 << 9
-    mov r6d, r2d
-    add r6d, r3d
-    sar r6d, 1
-    sub r4d, r6d
+%macro FILL_HALFPLANE_TILE 2
+    cglobal fill_halfplane_tile%2, 6,7,9
+        movsxd r2q, r2d  ; a
+        movsxd r3q, r3d  ; b
+        sar r4q, 7 + %1  ; c >> (tile_order + 7)
+        movsxd r5q, r5d  ; scale
+        mov r6q, 1 << (45 + %1)
+        imul r2q, r5q
+        add r2q, r6q
+        sar r2q, 46 + %1  ; aa
+        imul r3q, r5q
+        add r3q, r6q
+        sar r3q, 46 + %1  ; bb
+        imul r4q, r5q
+        shr r6q, 1 + %1
+        add r4q, r6q
+        sar r4q, 45  ; cc
+        add r4d, 1 << (13 - %1)
+        mov r6d, r2d
+        add r6d, r3d
+        sar r6d, 1
+        sub r4d, r6d
 
-    movdqa xmm0, [bcast_word wrt rip]
-    movd xmm1, r4d  ; cc
-    pshufb xmm1, xmm0  ; SSSE3
-    movd xmm2, r2d  ; aa
-    pshufb xmm2, xmm0  ; SSSE3
-    movdqa xmm3, xmm2
-    pmullw xmm2, [words_index wrt rip]
-    psubw xmm1, xmm2  ; cc - aa * i
-    psllw xmm3, 3  ; 8 * aa
+        movdqa xmm0, [bcast_word wrt rip]
+        movd xmm1, r4d  ; cc
+        pshufb xmm1, xmm0  ; SSSE3
+        movd xmm2, r2d  ; aa
+        pshufb xmm2, xmm0  ; SSSE3
+        movdqa xmm3, xmm2
+        pmullw xmm2, [words_index wrt rip]
+        psubw xmm1, xmm2  ; cc - aa * i
+        psllw xmm3, 3  ; 8 * aa
 
-    mov r4d, r2d
-    mov r6d, r4d
-    sar r6d, 31
-    xor r4d, r6d
-    sub r4d, r6d  ; abs_a
-    mov r5d, r3d
-    mov r6d, r5d
-    sar r6d, 31
-    xor r5d, r6d
-    sub r5d, r6d  ; abs_b
-    cmp r4d, r5d
-    cmovg r4d, r5d
-    add r4d, 2
-    sar r4d, 2  ; delta
-    movd xmm2, r4d
-    pshufb xmm2, xmm0  ; SSSE3
-    psubw xmm1, xmm2  ; c1 = cc - aa * i - delta
-    paddw xmm2, xmm2  ; 2 * delta
+        mov r4d, r2d
+        mov r6d, r4d
+        sar r6d, 31
+        xor r4d, r6d
+        sub r4d, r6d  ; abs_a
+        mov r5d, r3d
+        mov r6d, r5d
+        sar r6d, 31
+        xor r5d, r6d
+        sub r5d, r6d  ; abs_b
+        cmp r4d, r5d
+        cmovg r4d, r5d
+        add r4d, 2
+        sar r4d, 2  ; delta
+        movd xmm2, r4d
+        pshufb xmm2, xmm0  ; SSSE3
+        psubw xmm1, xmm2  ; c1 = cc - aa * i - delta
+        paddw xmm2, xmm2  ; 2 * delta
 
-    shl r2d, 3
-    sub r3d, r2d  ; bb - 8 * aa
-    movd xmm8, r3d
-    pshufb xmm8, xmm0  ; SSSE3
+        imul r2d, r2d, (1 << %1) - 8
+        sub r3d, r2d  ; bb - (tile_size - 8) * aa
+        movd xmm8, r3d
+        pshufb xmm8, xmm0  ; SSSE3
 
-    pxor xmm0, xmm0
-    movdqa xmm4, [words_1023 wrt rip]
+        pxor xmm0, xmm0
+        movdqa xmm4, [words_tile%2 wrt rip]
+        mov r3d, (1 << %1)
+        jmp .loop_entry
 
-    %define FIRST
-    %rep 16
-        %ifdef FIRST
-            %undef FIRST
-        %else
+        .loop_start
             add r0, r1
             psubw xmm1, xmm8
-        %endif
+        .loop_entry
+            %assign i 0
+            %rep (1 << %1) / 16
+                %if i > 0
+                    psubw xmm1, xmm3
+                %endif
+                CALC_LINE 1, 2, 0, 4, 5, 7, 7 - %1
+                psubw xmm1, xmm3
+                CALC_LINE 1, 2, 0, 4, 6, 7, 7 - %1
+                packuswb xmm5, xmm6
+                movaps [r0 + i], xmm5
+                %assign i i + 16
+            %endrep
+            sub r3d,1
+            jnz .loop_start
+        RET
+%endmacro
 
-        CALC_LINE 1, 2, 0, 4, 5, 7, 3
-        psubw xmm1, xmm3
-        CALC_LINE 1, 2, 0, 4, 6, 7, 3
-        packuswb xmm5, xmm6
-        movaps [r0], xmm5
-    %endrep
-    RET
-
-
-;------------------------------------------------------------------------------
-; void fill_halfplane_tile32( uint8_t *buf, ptrdiff_t stride,
-;                             int32_t a, int32_t b, int64_t c, int32_t scale );
-;------------------------------------------------------------------------------
-
-cglobal fill_halfplane_tile32, 6,7,9
-    movsxd r2, r2d  ; a
-    movsxd r3, r3d  ; b
-    sar r4, 12  ; c >> 12
-    movsxd r5, r5d  ; scale
-    mov r6, 1 << 50
-    imul r2, r5
-    add r2, r6
-    sar r2, 51  ; aa
-    imul r3, r5
-    add r3, r6
-    sar r3, 51  ; bb
-    imul r4, r5
-    shr r6, 6
-    add r4, r6
-    sar r4, 45  ; cc
-    add r4d, 1 << 8
-    mov r6d, r2d
-    add r6d, r3d
-    sar r6d, 1
-    sub r4d, r6d
-
-    movdqa xmm0, [bcast_word wrt rip]
-    movd xmm1, r4d  ; cc
-    pshufb xmm1, xmm0  ; SSSE3
-    movd xmm2, r2d  ; aa
-    pshufb xmm2, xmm0  ; SSSE3
-    movdqa xmm3, xmm2
-    pmullw xmm2, [words_index wrt rip]
-    psubw xmm1, xmm2  ; cc - aa * i
-    psllw xmm3, 3  ; 8 * aa
-
-    mov r4d, r2d
-    mov r6d, r4d
-    sar r6d, 31
-    xor r4d, r6d
-    sub r4d, r6d  ; abs_a
-    mov r5d, r3d
-    mov r6d, r5d
-    sar r6d, 31
-    xor r5d, r6d
-    sub r5d, r6d  ; abs_b
-    cmp r4d, r5d
-    cmovg r4d, r5d
-    add r4d, 2
-    sar r4d, 2  ; delta
-    movd xmm2, r4d
-    pshufb xmm2, xmm0  ; SSSE3
-    psubw xmm1, xmm2  ; c1 = cc - aa * i - delta
-    paddw xmm2, xmm2  ; 2 * delta
-
-    imul r2d, r2d, 24
-    sub r3d, r2d  ; bb - 24 * aa
-    movd xmm8, r3d
-    pshufb xmm8, xmm0  ; SSSE3
-
-    pxor xmm0, xmm0
-    movdqa xmm4, [words_511 wrt rip]
-
-    %define FIRST
-    %rep 32
-        %ifdef FIRST
-            %undef FIRST
-        %else
-            add r0, r1
-            psubw xmm1, xmm8
-        %endif
-
-        CALC_LINE 1, 2, 0, 4, 5, 7, 2
-        psubw xmm1, xmm3
-        CALC_LINE 1, 2, 0, 4, 6, 7, 2
-        packuswb xmm5, xmm6
-        movaps [r0], xmm5
-        psubw xmm1, xmm3
-        CALC_LINE 1, 2, 0, 4, 5, 7, 2
-        psubw xmm1, xmm3
-        CALC_LINE 1, 2, 0, 4, 6, 7, 2
-        packuswb xmm5, xmm6
-        movaps [r0 + 16], xmm5
-    %endrep
-    RET
-
+INIT_XMM sse2
+FILL_HALFPLANE_TILE 4,16
+INIT_XMM sse2
+FILL_HALFPLANE_TILE 5,32
