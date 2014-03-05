@@ -39,8 +39,8 @@ void fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment 
 
 void ass_fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride);
 void ass_fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride);
-void fill_halfplane_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
-void fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
+void ass_fill_halfplane_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
+void ass_fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale);
 void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
 void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding);
 
@@ -52,14 +52,14 @@ void rasterizer_init(struct Rasterizer *rst)
         {
             rst->tile_order = 4;
             rst->fill_solid = ass_fill_solid_tile16_sse2;
-            rst->fill_halfplane = fill_halfplane_tile16_sse2;
+            rst->fill_halfplane = ass_fill_halfplane_tile16_sse2;
             rst->fill_generic = fill_generic_tile16_sse2;
         }
         else
         {
             rst->tile_order = 5;
             rst->fill_solid = ass_fill_solid_tile32_sse2;
-            rst->fill_halfplane = fill_halfplane_tile32_sse2;
+            rst->fill_halfplane = ass_fill_halfplane_tile32_sse2;
             rst->fill_generic = fill_generic_tile32_sse2;
         }
     }
