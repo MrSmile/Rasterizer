@@ -83,44 +83,71 @@ cglobal fill_solid_tile32, 2,2,1
 ;------------------------------------------------------------------------------
 
 %macro FILL_HALFPLANE_TILE 2
-    cglobal fill_halfplane_tile%2, 6,7,9
-        movsxd r2q, r2d  ; a
-        movsxd r3q, r3d  ; b
-        sar r4q, 7 + %1  ; c >> (tile_order + 7)
-        movsxd r5q, r5d  ; scale
-        mov r6q, 1 << (45 + %1)
-        imul r2q, r5q
-        add r2q, r6q
-        sar r2q, 46 + %1  ; aa
-        imul r3q, r5q
-        add r3q, r6q
-        sar r3q, 46 + %1  ; bb
-        imul r4q, r5q
-        shr r6q, 1 + %1
-        add r4q, r6q
-        sar r4q, 45  ; cc
+    %if ARCH_X86_64
+        cglobal fill_halfplane_tile%2, 6,7,9
+            movsxd r2q, r2d  ; a
+            movsxd r3q, r3d  ; b
+            sar r4q, 7 + %1  ; c >> (tile_order + 7)
+            movsxd r5q, r5d  ; scale
+            mov r6q, 1 << (45 + %1)
+            imul r2q, r5q
+            add r2q, r6q
+            sar r2q, 46 + %1  ; aa
+            imul r3q, r5q
+            add r3q, r6q
+            sar r3q, 46 + %1  ; bb
+            imul r4q, r5q
+            shr r6q, 1 + %1
+            add r4q, r6q
+            sar r4q, 45  ; cc
+    %else
+        cglobal fill_halfplane_tile%2, 0,7,8
+            mov r0d, r4m  ; c_lo
+            mov r2d, r5m  ; c_hi
+            mov r1d, r6m  ; scale
+            mov r5d, 1 << 12
+            shr r0d, 7 + %1
+            shl r2d, 25 - %1
+            or r0d, r2d  ; r0d (eax) = c >> (tile_order + 7)
+            imul r1d  ; r2d (edx) = (c >> ...) * scale >> 32
+            add r2d, r5d
+            sar r2d, 13
+            mov r4d, r2d  ; cc
+            shl r5q, 1 + %1
+            mov r0d, r3m  ; r0d (eax) = b
+            imul r1d  ; r2d (edx) = b * scale >> 32
+            add r2d, r5d
+            sar r2d, 14 + %1
+            mov r3d, r2d  ; bb
+            mov r0d, r2m  ; r0d (eax) = a
+            imul r1d  ; r2d (edx) = a * scale >> 32
+            add r2d, r5d
+            sar r2d, 14 + %1  ; aa
+            mov r0d, r0m
+            mov r1d, r1m
+    %endif
         add r4d, 1 << (13 - %1)
         mov r6d, r2d
         add r6d, r3d
         sar r6d, 1
         sub r4d, r6d
 
-        movdqa xmm0, [bcast_word wrt rip]
+        movdqa xmm0, [bcast_word]
         movd xmm1, r4d  ; cc
         pshufb xmm1, xmm0  ; SSSE3
         movd xmm2, r2d  ; aa
         pshufb xmm2, xmm0  ; SSSE3
         movdqa xmm3, xmm2
-        pmullw xmm2, [words_index wrt rip]
+        pmullw xmm2, [words_index]
         psubw xmm1, xmm2  ; cc - aa * i
         psllw xmm3, 3  ; 8 * aa
 
-        mov r4d, r2d
+        mov r4d, r2d  ; aa
         mov r6d, r4d
         sar r6d, 31
         xor r4d, r6d
         sub r4d, r6d  ; abs_a
-        mov r5d, r3d
+        mov r5d, r3d  ; bb
         mov r6d, r5d
         sar r6d, 31
         xor r5d, r6d
@@ -136,17 +163,30 @@ cglobal fill_solid_tile32, 2,2,1
 
         imul r2d, r2d, (1 << %1) - 8
         sub r3d, r2d  ; bb - (tile_size - 8) * aa
-        movd xmm8, r3d
-        pshufb xmm8, xmm0  ; SSSE3
+        %if ARCH_X86_64
+            movd xmm8, r3d
+            pshufb xmm8, xmm0  ; SSSE3
+        %else
+            and r3d, 0xFFFF
+            mov r2d, r3d
+            shl r2d, 16
+            or r2d, r3d
+        %endif
 
         pxor xmm0, xmm0
-        movdqa xmm4, [words_tile%2 wrt rip]
+        movdqa xmm4, [words_tile%2]
         mov r3d, (1 << %1)
         jmp .loop_entry
 
         .loop_start
             add r0, r1
-            psubw xmm1, xmm8
+            %if ARCH_X86_64
+                psubw xmm1, xmm8
+            %else
+                movd xmm7, r2d
+                pshufd xmm7, xmm7, 0
+                psubw xmm1, xmm7
+            %endif
         .loop_entry
             %assign i 0
             %rep (1 << %1) / 16

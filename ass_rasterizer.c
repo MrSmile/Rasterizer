@@ -648,6 +648,6 @@ int rasterizer_test(struct Rasterizer *rst, uint8_t buf[64 * 64])  // DEBUG
         rst->y_max = rst->y_max > rst->linebuf[0][k].y_max ? rst->y_max : rst->linebuf[0][k].y_max;
     }
 
-    memset(buf, 128, 64 * 64);
+    memset(buf, 0, 64 * 64);
     return rasterizer_fill(rst, buf, 0, 0, 64, 64, 64, 1);
 }

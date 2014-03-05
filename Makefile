@@ -2,6 +2,7 @@
 SOURCE = raster.cpp fill.cpp main.cpp
 HEADER = point.h raster.h
 FLAGS = -I/usr/include/freetype2 -Wall
+#FLAGS += -m32 -msse2
 CFLAGS = -std=c99 $(FLAGS)
 CXXFLAGS = -std=c++11 -fno-exceptions -Wno-parentheses $(FLAGS)
 DFLAGS = -g -O0 -DDEBUG
@@ -10,6 +11,7 @@ LIBS = -lfreetype -lpnglite -lz
 PROGRAM = raster
 
 YASM = yasm -DARCH_X86_64=1 -m amd64 -f elf -DHAVE_ALIGNED_STACK=1
+#YASM = yasm -DARCH_X86_64=0 -m x86 -f elf -DHAVE_ALIGNED_STACK=1
 
 
 debug: $(SOURCE) $(HEADER)

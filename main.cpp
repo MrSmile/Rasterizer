@@ -57,44 +57,45 @@ int test_c_rasterizer()
 void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
 {
     ptrdiff_t stride = width * n_outlines;
-    vector<uint8_t> image(3 * height * stride, 0);
-    uint8_t *buf = image.data();
+    vector<uint8_t> image(3 * height * stride + 15, 0);
+    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + 15) & ~15), *ptr = buf;
 
 #ifdef PURE_C
     Rasterizer rst;  rasterizer_init(&rst);
-    for(size_t i = 0; i < n_outlines; i++, buf += width)
+    for(size_t i = 0; i < n_outlines; i++, ptr += width)
     {
         rasterizer_set_outline(&rst, &outline[i]);
-        if(!rasterizer_fill(&rst, buf, 0, 0, width, height, stride, 1))exit(-1);
+        if(!rasterizer_fill(&rst, ptr, 0, 0, width, height, stride, 1))exit(-1);
     }
     rasterizer_done(&rst);
 #else
     Polyline poly;
-    for(size_t i = 0; i < n_outlines; i++, buf += width)
+    for(size_t i = 0; i < n_outlines; i++, ptr += width)
     {
         poly.create(outline[i]);
-        poly.rasterize(buf, 0, 0, width, height, stride);
+        poly.rasterize(ptr, 0, 0, width, height, stride);
     }
 #endif
 
     FT_Bitmap bm;  bm.rows = height;  bm.width = width;
-    bm.pitch = stride;  bm.buffer = image.data() + height * stride;
+    bm.pitch = stride;  bm.buffer = buf + height * stride;
     bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
     for(size_t i = 0; i < n_outlines; i++, bm.buffer += width)
         FT_Outline_Get_Bitmap(lib, &outline[i], &bm);
 
-    uint8_t *src1 = image.data() + 0 * height * stride;
-    uint8_t *src2 = image.data() + 1 * height * stride;
-    uint8_t *dst  = image.data() + 2 * height * stride;
+    uint8_t *src1 = buf + 0 * height * stride;
+    uint8_t *src2 = buf + 1 * height * stride;
+    uint8_t *dst  = buf + 2 * height * stride;
     for(int i = 0; i < height * stride; i++)
         dst[i] = max(0, min(255, 4 * (src1[i] - src2[i]) + 127));
 
-    write_image("output.png", image.data(), stride, 3 * height);
+    write_image("output.png", buf, stride, 3 * height);
 }
 
 void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height, int repeat)
 {
-    vector<uint8_t> image(width * height);
+    vector<uint8_t> image(width * height + 15);
+    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + 15) & ~15);
 
     clock_t tm0 = clock();
 
@@ -103,7 +104,7 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         rasterizer_set_outline(&rst, &outline[i]);
-        if(!rasterizer_fill(&rst, image.data(), 0, 0, width, height, width, 1))exit(-1);
+        if(!rasterizer_fill(&rst, buf, 0, 0, width, height, width, 1))exit(-1);
     }
     rasterizer_done(&rst);
 #else
@@ -111,14 +112,14 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         poly.create(outline[i]);
-        poly.rasterize(image.data(), 0, 0, width, height, width);
+        poly.rasterize(buf, 0, 0, width, height, width);
     }
 #endif
 
     clock_t tm1 = clock();
 
     FT_Bitmap bm;  bm.rows = height;  bm.width = bm.pitch = width;
-    bm.buffer = image.data();  bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
+    bm.buffer = buf;  bm.num_grays = 256;  bm.pixel_mode = FT_PIXEL_MODE_GRAY;
 
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
         FT_Outline_Get_Bitmap(lib, &outline[i], &bm);

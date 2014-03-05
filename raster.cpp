@@ -295,7 +295,7 @@ int Polyline::split_vert(const vector<Line> &src, size_t offs, vector<Line> &dst
     return winding;
 }
 
-void Polyline::rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding)
+void Polyline::rasterize_level(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding)
 {
     assert(width > 0 && !(width & tile_mask) && height > 0 && !(height & tile_mask) && unsigned(index) < 3);
 
@@ -338,8 +338,8 @@ void Polyline::rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, 
     }
     line.resize(offs);
 
-    rasterize(buf,  width,  height,  stride, dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
-    rasterize(buf1, width1, height1, stride, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
+    rasterize_level(buf,  width,  height,  stride, dst0, offs0, winding);   assert(linebuf[dst0].size() == offs0);
+    rasterize_level(buf1, width1, height1, stride, dst1, offs1, winding1);  assert(linebuf[dst1].size() == offs1);
 }
 
 void Polyline::rasterize(uint8_t *buf, int x0, int y0, int width, int height, ptrdiff_t stride, bool vert_flip)
@@ -386,7 +386,7 @@ void Polyline::rasterize(uint8_t *buf, int x0, int y0, int width, int height, pt
         winding = split_vert(linebuf[src], 0, linebuf[dst0], linebuf[dst1], 0);
         linebuf[src].clear();  linebuf[dst0].clear();  swap(src, dst1);
     }
-    rasterize(buf, width, height, stride, src, 0, winding);
+    rasterize_level(buf, width, height, stride, src, 0, winding);
 }
 
 

@@ -146,7 +146,7 @@ private:
 
     static int split_horz(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t x);
     static int split_vert(const std::vector<Line> &src, size_t offs, std::vector<Line> &dst0, std::vector<Line> &dst1, int32_t y);
-    void rasterize(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding);
+    void rasterize_level(uint8_t *buf, int width, int height, ptrdiff_t stride, int index, size_t offs, int winding);
 
 public:
     bool create(const FT_Outline &path);
