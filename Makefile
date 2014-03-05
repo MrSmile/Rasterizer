@@ -9,18 +9,22 @@ RFLAGS = -g -Ofast -flto -fno-omit-frame-pointer -mtune=native -DNDEBUG
 LIBS = -lfreetype -lpnglite -lz
 PROGRAM = raster
 
+YASM = yasm -DARCH_X86_64=1 -m amd64 -f elf -DHAVE_ALIGNED_STACK=1
+
 
 debug: $(SOURCE) $(HEADER)
+	$(YASM) rasterizer.asm -o rasterizer.o
 	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer.c -c -o ass_rasterizer.o
 	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer_c.c -c -o ass_rasterizer_c.o
 	gcc $(DFLAGS) $(CFLAGS) ass_rasterizer_sse2.c -c -o ass_rasterizer_sse2.o
-	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o $(LIBS) -o $(PROGRAM)
+	g++ $(DFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o rasterizer.o $(LIBS) -o $(PROGRAM)
 
 release: $(SOURCE) $(HEADER)
+	$(YASM) rasterizer.asm -o rasterizer.o
 	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer.c -c -o ass_rasterizer.o
 	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer_c.c -c -o ass_rasterizer_c.o
 	gcc $(RFLAGS) $(CFLAGS) ass_rasterizer_sse2.c -c -o ass_rasterizer_sse2.o
-	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o $(LIBS) -o $(PROGRAM)
+	g++ $(RFLAGS) $(CXXFLAGS) $(SOURCE) ass_rasterizer.o ass_rasterizer_c.o ass_rasterizer_sse2.o rasterizer.o $(LIBS) -o $(PROGRAM)
 
 clean:
 	rm $(PROGRAM) *.o
