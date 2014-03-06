@@ -144,7 +144,7 @@ template<int width, int res_ord> struct HalfplaneFillerSSE
 
     void fill_line(uint8_t *buf, int16_t c)
     {
-        static constexpr int16x8_t full = int16x8((256 << (8 - res_ord)) - 1);
+        static constexpr int16x8_t full = int16x8(256 << (8 - res_ord));
 
         assert(!(reinterpret_cast<uintptr_t>(buf) & 15));
         char8x16_t *ptr = reinterpret_cast<char8x16_t *>(__builtin_assume_aligned(buf, 16));

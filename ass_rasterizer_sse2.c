@@ -74,7 +74,7 @@ void fill_halfplane_tile16_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32
     }
 
     const __m128i zero = _mm_set1_epi16(0);
-    const __m128i full = _mm_set1_epi16((1 << 10) - 1);
+    const __m128i full = _mm_set1_epi16(1 << 10);
     for(j = 0; j < 16; j++, buf += stride, cc -= bb)
     {
         __m128i res[2];
@@ -113,7 +113,7 @@ void fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32
     }
 
     const __m128i zero = _mm_set1_epi16(0);
-    const __m128i full = _mm_set1_epi16((1 << 9) - 1);
+    const __m128i full = _mm_set1_epi16(1 << 9);
     for(j = 0; j < 32; j++, buf += stride, cc -= bb)
     {
         __m128i res[4], vc = _mm_set1_epi16(cc);
@@ -132,24 +132,24 @@ void fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride, int32_t a, int32
 
 
 static inline void update_border_line16(__m128i res[2],
-    int16_t a, int16_t abs_a, const __m128i va[2], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
+    int16_t abs_a, const __m128i va[2], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
 {
-    int16_t size = (up - dn) << 1, offs = size >> 1;
-    int16_t w = (1 << 13) + (size << 6) - (abs_a << 3);
-    w = (w < 1 << 13 ? w : 1 << 13);
+    int16_t size = up - dn;
+    int16_t w = (1 << 10) + (size << 4) - abs_a;
+    w = (w < 1 << 10 ? w : 1 << 10) << 3;
 
-    int32_t dc_a = (int32_t)abs_a << 7, dc_b = abs_b * (int32_t)size;
-    int16_t dc = (dc_a < dc_b ? dc_a : dc_b) >> 9;
+    int16_t dc_b = abs_b * (int32_t)size >> 6;
+    int16_t dc = (abs_a < dc_b ? abs_a : dc_b) >> 2;
 
     c -= (int32_t)b * (int16_t)(dn + up) >> 7;
-    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + offs;
-    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + offs;
+    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + size;
+    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + size;
 
     int i;
     __m128i vw = _mm_set1_epi16(w);
-    __m128i vs = _mm_set1_epi16(size);
     __m128i vc1 = _mm_set1_epi16(offs1);
     __m128i vc2 = _mm_set1_epi16(offs2);
+    __m128i vs = _mm_set1_epi16(size << 1);
     const __m128i zero = _mm_set1_epi16(0);
     for(i = 0; i < 2; i++)
     {
@@ -207,9 +207,9 @@ void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
         {
             if(up == dn)
             {
-                update_border_line16(res[dn], a, abs_a, va, b, abs_b, c, dn_pos, up_pos);  continue;
+                update_border_line16(res[dn], abs_a, va, b, abs_b, c, dn_pos, up_pos);  continue;
             }
-            update_border_line16(res[dn], a, abs_a, va, b, abs_b, c, dn_pos, 64);
+            update_border_line16(res[dn], abs_a, va, b, abs_b, c, dn_pos, 64);
             dn++;  c -= b;
         }
         for(j = dn; j < up; j++, c -= b)
@@ -226,7 +226,7 @@ void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
                 res[j][i] = _mm_add_epi16(res[j][i], c12);
             }
         }
-        if(up_pos)update_border_line16(res[up], a, abs_a, va, b, abs_b, c, 0, up_pos);
+        if(up_pos)update_border_line16(res[up], abs_a, va, b, abs_b, c, 0, up_pos);
     }
 
     int16_t cur = winding << 8;
@@ -244,24 +244,24 @@ void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
 }
 
 static inline void update_border_line32(__m128i res[4],
-    int16_t a, int16_t abs_a, const __m128i va[4], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
+    int16_t abs_a, const __m128i va[4], int16_t b, int16_t abs_b, int16_t c, int dn, int up)
 {
-    int16_t size = (up - dn) << 1, offs = size >> 1;
-    int16_t w = (1 << 14) + (size << 7) - (abs_a << 5);
-    w = (w < 1 << 14 ? w : 1 << 14);
+    int16_t size = up - dn;
+    int16_t w = (1 << 9) + (size << 3) - abs_a;
+    w = (w < 1 << 9 ? w : 1 << 9) << 5;
 
-    int32_t dc_a = (int32_t)abs_a << 7, dc_b = abs_b * (int32_t)size;
-    int16_t dc = (dc_a < dc_b ? dc_a : dc_b) >> 9;
+    int16_t dc_b = abs_b * (int32_t)size >> 6;
+    int16_t dc = (abs_a < dc_b ? abs_a : dc_b) >> 2;
 
     c -= (int32_t)b * (int16_t)(dn + up) >> 7;
-    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + offs;
-    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + offs;
+    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + size;
+    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + size;
 
     int i;
     __m128i vw = _mm_set1_epi16(w);
-    __m128i vs = _mm_set1_epi16(size);
     __m128i vc1 = _mm_set1_epi16(offs1);
     __m128i vc2 = _mm_set1_epi16(offs2);
+    __m128i vs = _mm_set1_epi16(size << 1);
     const __m128i zero = _mm_set1_epi16(0);
     for(i = 0; i < 4; i++)
     {
@@ -319,9 +319,9 @@ void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
         {
             if(up == dn)
             {
-                update_border_line32(res[dn], a, abs_a, va, b, abs_b, c, dn_pos, up_pos);  continue;
+                update_border_line32(res[dn], abs_a, va, b, abs_b, c, dn_pos, up_pos);  continue;
             }
-            update_border_line32(res[dn], a, abs_a, va, b, abs_b, c, dn_pos, 64);
+            update_border_line32(res[dn], abs_a, va, b, abs_b, c, dn_pos, 64);
             dn++;  c -= b;
         }
         for(j = dn; j < up; j++, c -= b)
@@ -338,7 +338,7 @@ void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
                 res[j][i] = _mm_add_epi16(res[j][i], c12);
             }
         }
-        if(up_pos)update_border_line32(res[up], a, abs_a, va, b, abs_b, c, 0, up_pos);
+        if(up_pos)update_border_line32(res[up], abs_a, va, b, abs_b, c, 0, up_pos);
     }
 
     int16_t cur = winding << 8;
