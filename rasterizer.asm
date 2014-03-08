@@ -62,19 +62,19 @@ cglobal fill_solid_tile32, 2,2,1
 
 
 ;------------------------------------------------------------------------------
-; CALC_LINE src, delta, zero, full, dst, tmp, shift
+; CALC_LINE dst, src, delta, zero, full, tmp, tile_order
 ;------------------------------------------------------------------------------
 
 %macro CALC_LINE 7
-    movaps xmm%5, xmm%1
-    movaps xmm%6, xmm%5
-    pmaxsw xmm%5, xmm%3
-    pminsw xmm%5, xmm%4
-    paddw xmm%6, xmm%2
-    pmaxsw xmm%6, xmm%3
-    pminsw xmm%6, xmm%4
-    paddw xmm%5, xmm%6
-    psraw xmm%5, %7
+    movaps xmm%1, %2
+    movaps xmm%6, %2
+    pmaxsw xmm%1, %4
+    pminsw xmm%1, %5
+    paddw xmm%6, %3
+    pmaxsw xmm%6, %4
+    pminsw xmm%6, %5
+    paddw xmm%1, xmm%6
+    psraw xmm%1, 7 - %7
 %endmacro
 
 ;------------------------------------------------------------------------------
@@ -194,9 +194,9 @@ cglobal fill_solid_tile32, 2,2,1
                 %if i > 0
                     psubw xmm1, xmm3
                 %endif
-                CALC_LINE 1, 2, 0, 4, 5, 7, 7 - %1
+                CALC_LINE 5, xmm1,xmm2, xmm0,xmm4, 7, %1
                 psubw xmm1, xmm3
-                CALC_LINE 1, 2, 0, 4, 6, 7, 7 - %1
+                CALC_LINE 6, xmm1,xmm2, xmm0,xmm4, 7, %1
                 packuswb xmm5, xmm6
                 movaps [r0 + i], xmm5
                 %assign i i + 16
@@ -490,15 +490,7 @@ FILL_HALFPLANE_TILE 5,32
                     %if i
                         psubw xmm_c, xmm_va8
                     %endif
-                    movaps xmm9, xmm_c  ; c1
-                    movaps xmm10, xmm_c
-                    paddw xmm10, xmm8  ; c2
-                    pmaxsw xmm9, xmm_zero
-                    pminsw xmm9, xmm_full
-                    pmaxsw xmm10, xmm_zero
-                    pminsw xmm10, xmm_full
-                    paddw xmm9, xmm10
-                    psraw xmm9, 7 - %1
+                    CALC_LINE 9, xmm_c,xmm8, xmm_zero,xmm_full, 10, %1
                     movaps xmm10, [r8 + i]
                     paddw xmm9, xmm10
                     movaps [r8 + i], xmm9

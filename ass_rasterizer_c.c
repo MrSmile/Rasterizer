@@ -21,7 +21,7 @@
 
 
 
-void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride)
+void ass_fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride)
 {
     int i, j;
     int8_t value = 255;
@@ -29,7 +29,7 @@ void fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride)
         for(i = 0; i < 16; i++)buf[i] = value;
 }
 
-void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride)
+void ass_fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride)
 {
     int i, j;
     int8_t value = 255;
@@ -38,7 +38,7 @@ void fill_solid_tile32_c(uint8_t *buf, ptrdiff_t stride)
 }
 
 
-void fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
+void ass_fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     int16_t aa = (a * (int64_t)scale + ((int64_t)1 << 49)) >> 50;
     int16_t bb = (b * (int64_t)scale + ((int64_t)1 << 49)) >> 50;
@@ -65,7 +65,7 @@ void fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t 
     }
 }
 
-void fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
+void ass_fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride, int32_t a, int32_t b, int64_t c, int32_t scale)
 {
     int16_t aa = (a * (int64_t)scale + ((int64_t)1 << 50)) >> 51;
     int16_t bb = (b * (int64_t)scale + ((int64_t)1 << 50)) >> 51;
@@ -101,25 +101,25 @@ static inline void update_border_line16(int16_t res[16],
     w = (w < 1 << 10 ? w : 1 << 10) << 3;
 
     int16_t dc_b = abs_b * (int32_t)size >> 6;
-    int16_t dc = (abs_a < dc_b ? abs_a : dc_b) >> 2;
+    int16_t dc = ((abs_a < dc_b ? abs_a : dc_b) + 2) >> 2;
 
-    c -= (int32_t)b * (int16_t)(dn + up) >> 7;
-    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + size;
-    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + size;
+    int16_t base = (int32_t)b * (int16_t)(dn + up) >> 7;
+    int16_t offs1 = size - ((base + dc) * (int32_t)w >> 16);
+    int16_t offs2 = size - ((base - dc) * (int32_t)w >> 16);
 
     int i;
     size <<= 1;
     for(i = 0; i < 16; i++)
     {
-        int16_t aw = va[i] * (int32_t)w >> 16;
-        int16_t c1 = offs1 - aw, c2 = offs2 - aw;
+        int16_t cw = (c - va[i]) * (int32_t)w >> 16;
+        int16_t c1 = cw + offs1, c2 = cw + offs2;
         c1 = (c1 > 0 ? c1 : 0);  c1 = (c1 < size ? c1 : size);
         c2 = (c2 > 0 ? c2 : 0);  c2 = (c2 < size ? c2 : size);
         res[i] += c1 + c2;
     }
 }
 
-void fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void ass_fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
 {
     int i, j;
     int16_t res[16][16], delta[18];
@@ -202,25 +202,25 @@ static inline void update_border_line32(int16_t res[32],
     w = (w < 1 << 9 ? w : 1 << 9) << 5;
 
     int16_t dc_b = abs_b * (int32_t)size >> 6;
-    int16_t dc = (abs_a < dc_b ? abs_a : dc_b) >> 2;
+    int16_t dc = ((abs_a < dc_b ? abs_a : dc_b) + 2) >> 2;
 
-    c -= (int32_t)b * (int16_t)(dn + up) >> 7;
-    int16_t offs1 = ((c - dc) * (int32_t)w >> 16) + size;
-    int16_t offs2 = ((c + dc) * (int32_t)w >> 16) + size;
+    int16_t base = (int32_t)b * (int16_t)(dn + up) >> 7;
+    int16_t offs1 = size - ((base + dc) * (int32_t)w >> 16);
+    int16_t offs2 = size - ((base - dc) * (int32_t)w >> 16);
 
     int i;
     size <<= 1;
     for(i = 0; i < 32; i++)
     {
-        int16_t aw = va[i] * (int32_t)w >> 16;
-        int16_t c1 = offs1 - aw, c2 = offs2 - aw;
+        int16_t cw = (c - va[i]) * (int32_t)w >> 16;
+        int16_t c1 = cw + offs1, c2 = cw + offs2;
         c1 = (c1 > 0 ? c1 : 0);  c1 = (c1 < size ? c1 : size);
         c2 = (c2 > 0 ? c2 : 0);  c2 = (c2 < size ? c2 : size);
         res[i] += c1 + c2;
     }
 }
 
-void fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void ass_fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
 {
     int i, j;
     int16_t res[32][32], delta[34];
