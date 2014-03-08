@@ -323,7 +323,7 @@ FILL_HALFPLANE_TILE 5,32
 
     cglobal fill_generic_tile%2, 5,15,13, 2 * tile_size * (tile_size + 1) + 16
         pxor xmm_zero, xmm_zero
-        mov r6, rsp
+        mov r6, rstk
         %assign n tile_size * (tile_size + 1) / 8
         mov r5d, n / 8
         .zerofill_loop
@@ -345,7 +345,7 @@ FILL_HALFPLANE_TILE 5,32
         %endrep
         shl r4d, 8
         %assign DELTA_OFFS 2 * tile_size * tile_size
-        mov [rsp + DELTA_OFFS], r4w
+        mov [rstk + DELTA_OFFS], r4w
 
         movdqa xmm_bcast, [bcast_word]
         movdqa xmm_index, [words_index]
@@ -382,8 +382,8 @@ FILL_HALFPLANE_TILE 5,32
             lea r11d, [4 * r6d]
             mov r12d, 256
             sub r12d, r11d
-            sub [rsp + 2 * r8 + DELTA_OFFS], r12w
-            sub [rsp + 2 * r8 + DELTA_OFFS + 2], r11w
+            sub [rstk + 2 * r8 + DELTA_OFFS], r12w
+            sub [rstk + 2 * r8 + DELTA_OFFS + 2], r11w
         .no_delta_dn
 
             test r10d, 1 << 2
@@ -391,8 +391,8 @@ FILL_HALFPLANE_TILE 5,32
             lea r11d, [4 * r7d]
             mov r12d, 256
             sub r12d, r11d
-            add [rsp + 2 * r9 + DELTA_OFFS], r12w
-            add [rsp + 2 * r9 + DELTA_OFFS + 2], r11w
+            add [rstk + 2 * r9 + DELTA_OFFS], r12w
+            add [rstk + 2 * r9 + DELTA_OFFS + 2], r11w
         .no_delta_up
 
             cmp r4d, r5d
@@ -445,16 +445,11 @@ FILL_HALFPLANE_TILE 5,32
             %define r_b r12d
             %define r_abs_b r14d
             shl r8d, 1 + %1
-            add r8, rsp
+            add r8, rstk
             shl r9d, 1 + %1
-            add r9, rsp
+            add r9, rstk
             cmp r8, r9
             jz .single_line
-
-            mov r10d, 64
-            sub r10d, r6d  ; 64 - dn_pos
-            add r6d, 64  ; 64 + dn_pos
-            FILL_BORDER_LINE %1, r8, 10,6, 4,5, 7,8,9,10,11,12
 
             movd xmm_vba, r_b
             pshufb xmm_vba, xmm_bcast  ; SSSE3
@@ -462,10 +457,18 @@ FILL_HALFPLANE_TILE 5,32
                 psubw xmm_vba, xmm_va8  ; b - (tile_size - 8) * a
             %endrep
 
+            test r6d, r6d
+            jz .generic_fist
+            mov r10d, 64
+            sub r10d, r6d  ; 64 - dn_pos
+            add r6d, 64  ; 64 + dn_pos
+            FILL_BORDER_LINE %1, r8, 10,6, 4,5, 7,8,9,10,11,12
+            psubw xmm_c, xmm_vba
             add r8, 2 << %1
             cmp r8, r9
             jge .end_loop
 
+        .generic_fist
             mov r4d, 1 << (13 - %1)
             mov r10d, r_b
             sar r10d, 1
@@ -484,7 +487,6 @@ FILL_HALFPLANE_TILE 5,32
 
             paddw xmm_c, xmm7
             .internal_loop
-                psubw xmm_c, xmm_vba
                 %assign i 0
                 %rep (1 << %1) / 8
                     %if i
@@ -496,13 +498,15 @@ FILL_HALFPLANE_TILE 5,32
                     movaps [r8 + i], xmm9
                     %assign i i + 16
                 %endrep
+                psubw xmm_c, xmm_vba
                 add r8, 2 << %1
                 cmp r8, r9
                 jl .internal_loop
             psubw xmm_c, xmm7
 
         .end_loop
-            psubw xmm_c, xmm_vba
+            test r7d, r7d
+            jz .end_line_loop
             xor r6d, r6d
         .single_line
             mov r10d, r7d
@@ -515,9 +519,9 @@ FILL_HALFPLANE_TILE 5,32
             sub r3, 1
             jnz .line_loop
 
-        mov r2, rsp
+        mov r2, rstk
         mov r3d, 1 << %1
-        lea r4, [rsp + DELTA_OFFS]
+        lea r4, [rstk + DELTA_OFFS]
         xor r5d, r5d
         .fill_loop
             add r5w, [r4]
