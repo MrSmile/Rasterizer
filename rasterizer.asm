@@ -18,7 +18,6 @@
 ;* OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ;******************************************************************************
 
-%define HAVE_ALIGNED_STACK 1
 %include "x86inc.asm"
 
 SECTION_RODATA 32
@@ -396,10 +395,24 @@ FILL_HALFPLANE_TILE 5,32
     %define xmm_vba   xmm5
     %define xmm_c     xmm6
 
-    cglobal fill_generic_tile%2, 5,15,13, 2 * tile_size * (tile_size + 1) + 16
+    cglobal fill_generic_tile%2, 5,15,13
+        %assign alloc_size 2 * tile_size * (tile_size + 1) + 4
+        %if HAVE_ALIGNED_STACK
+            %assign alloc_size ((alloc_size + stack_offset + gprsize + 15) & ~15) - stack_offset - gprsize
+        %else
+            %assign alloc_size alloc_size + 32
+        %endif
+        SUB rstk, alloc_size
+
         pxor xmm_zero, xmm_zero
-        mov r6, rstk
         %assign n tile_size * (tile_size + 1) / 8
+        %if HAVE_ALIGNED_STACK
+            mov r6, rstk
+        %else
+            %assign n n + 1
+            lea r6, [rstk + 15]
+            and r6, ~15
+        %endif
         mov r5d, n / 8
         .zerofill_loop
             movaps [r6 + 0x00], xmm_zero
@@ -420,8 +433,11 @@ FILL_HALFPLANE_TILE 5,32
         %endrep
 
         shl r4d, 8
-        %assign DELTA_OFFS 2 * tile_size * tile_size
-        mov [rstk + DELTA_OFFS], r4w
+        %assign delta_offs 2 * tile_size * tile_size
+        %if HAVE_ALIGNED_STACK == 0
+            %assign delta_offs delta_offs + 16
+        %endif
+        mov [rstk + delta_offs], r4w
 
         movdqa xmm_bcast, [bcast_word]
         movdqa xmm_index, [words_index]
@@ -441,8 +457,8 @@ FILL_HALFPLANE_TILE 5,32
             and r7d, 63  ; up_pos
             shr r9d, 6  ; up
 
-            UPDATE_DELTA dn, rstk + 2 * r8 + DELTA_OFFS, 10,6, 11
-            UPDATE_DELTA up, rstk + 2 * r9 + DELTA_OFFS, 10,7, 11
+            UPDATE_DELTA dn, rstk + 2 * r8 + delta_offs, 10,6, 11
+            UPDATE_DELTA up, rstk + 2 * r9 + delta_offs, 10,7, 11
 
             cmp r4d, r5d
             jz .end_line_loop
@@ -494,9 +510,16 @@ FILL_HALFPLANE_TILE 5,32
             %define r_b r12d
             %define r_abs_b r14d
             shl r8d, 1 + %1
-            add r8, rstk
             shl r9d, 1 + %1
-            add r9, rstk
+            %if HAVE_ALIGNED_STACK
+                add r8, rstk
+                add r9, rstk
+            %else
+                lea r4, [rstk + 15]
+                and r4, ~15
+                add r8, r4
+                add r9, r4
+            %endif
             cmp r8, r9
             jz .single_line
 
@@ -568,9 +591,14 @@ FILL_HALFPLANE_TILE 5,32
             sub r3, 1
             jnz .line_loop
 
-        mov r2, rstk
+        %if HAVE_ALIGNED_STACK
+            mov r2, rstk
+        %else
+            lea r2, [rstk + 15]
+            and r2, ~15
+        %endif
         mov r3d, 1 << %1
-        lea r4, [rstk + DELTA_OFFS]
+        lea r4, [rstk + delta_offs]
         xor r5d, r5d
         .fill_loop
             add r5w, [r4]
@@ -595,6 +623,7 @@ FILL_HALFPLANE_TILE 5,32
             add r2, 2 << %1
             sub r3d,1
             jnz .fill_loop
+        ADD rstk, alloc_size
         RET
 %endmacro
 
@@ -611,10 +640,24 @@ FILL_HALFPLANE_TILE 5,32
     %define xmm_full  xmm3
     %define xmm_vba   xmm4
 
-    cglobal fill_generic_tile%2, 0,7,8, 2 * tile_size * (tile_size + 1) + 16
+    cglobal fill_generic_tile%2, 0,7,8
+        %assign alloc_size 2 * tile_size * (tile_size + 1) + 4 + 8
+        %if HAVE_ALIGNED_STACK
+            %assign alloc_size ((alloc_size + stack_offset + gprsize + 15) & ~15) - stack_offset - gprsize
+        %else
+            %assign alloc_size alloc_size + 32
+        %endif
+        SUB rstk, alloc_size
+
         pxor xmm_zero, xmm_zero
-        mov r6, rstk
         %assign n tile_size * (tile_size + 1) / 8
+        %if HAVE_ALIGNED_STACK
+            mov r6, rstk
+        %else
+            %assign n n + 1
+            lea r6, [rstk + 15]
+            and r6, ~15
+        %endif
         mov r5d, n / 8
         .zerofill_loop
             movaps [r6 + 0x00], xmm_zero
@@ -630,17 +673,20 @@ FILL_HALFPLANE_TILE 5,32
             jnz .zerofill_loop
         %assign i 0
         %rep n & 7
-            movaps [r6 + (i & 0x7F)], xmm_zero
+            movaps [r6 + i], xmm_zero
             %assign i i + 16
         %endrep
 
         mov r4w, r4m
         shl r4d, 8
-        %assign DELTA_OFFS 2 * tile_size * tile_size
-        mov [rstk + DELTA_OFFS], r4w
+        %assign delta_offs 2 * tile_size * tile_size
+        %if HAVE_ALIGNED_STACK == 0
+            %assign delta_offs delta_offs + 16
+        %endif
+        mov [rstk + delta_offs], r4w
 
-        %define up_addr [rstk + 2 * tile_size * (tile_size + 1) + 4]
-        %define up_pos [rstk + 2 * tile_size * (tile_size + 1) + 8]
+        %define up_addr [rstk + delta_offs + 2 * tile_size + 4]
+        %define up_pos [rstk + delta_offs + 2 * tile_size + 8]
 
         .line_loop
             mov r3, r2m
@@ -658,16 +704,22 @@ FILL_HALFPLANE_TILE 5,32
             mov r6d, r4d
             and r6d, 63  ; up_pos
             shr r4d, 6  ; up
-            UPDATE_DELTA up, rstk + 2 * r4 + DELTA_OFFS, 0,6, 1
+            UPDATE_DELTA up, rstk + 2 * r4 + delta_offs, 0,6, 1
             shl r4d, 1 + %1
-            add r4, rstk
+            %if HAVE_ALIGNED_STACK
+                add r4, rstk
+            %else
+                lea r1, [rstk + 15]
+                and r1, ~15
+                add r4, r1
+            %endif
             mov up_addr, r4
             mov up_pos, r6d
 
             mov r6d, r5d
             and r6d, 63  ; dn_pos
             shr r5d, 6  ; dn
-            UPDATE_DELTA dn, rstk + 2 * r5 + DELTA_OFFS, 0,6, 1
+            UPDATE_DELTA dn, rstk + 2 * r5 + delta_offs, 0,6, 1
 
             test r0d, 1
             jnz .end_line_loop
@@ -726,7 +778,13 @@ FILL_HALFPLANE_TILE 5,32
             %define r_abs_ab r2d
             %define r_b r3d
             shl r5d, 1 + %1
-            add r5, rstk
+            %if HAVE_ALIGNED_STACK
+                add r5, rstk
+            %else
+                lea r0, [rstk + 15]
+                and r0, ~15
+                add r5, r0
+            %endif
             cmp r5, up_addr
             jz .single_line
 
@@ -814,9 +872,14 @@ FILL_HALFPLANE_TILE 5,32
         mov r1, r1m
         movdqa xmm_bcast, [bcast_word]
 
-        mov r2, rstk
+        %if HAVE_ALIGNED_STACK
+            mov r2, rstk
+        %else
+            lea r2, [rstk + 15]
+            and r2, ~15
+        %endif
         mov r3d, 1 << %1
-        lea r4, [rstk + DELTA_OFFS]
+        lea r4, [rstk + delta_offs]
         xor r5d, r5d
         .fill_loop
             add r5w, [r4]
@@ -841,6 +904,7 @@ FILL_HALFPLANE_TILE 5,32
             add r2, 2 << %1
             sub r3d, 1
             jnz .fill_loop
+        ADD rstk, alloc_size
         RET
 %endmacro
 
