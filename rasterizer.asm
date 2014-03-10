@@ -22,12 +22,21 @@
 
 SECTION_RODATA 32
 
-bcast_word: db 0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1
 words_index: dw 0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F
 words_tile16: dw 1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024
 words_tile32: dw 512,512,512,512,512,512,512,512,512,512,512,512,512,512,512,512
 
 SECTION .text
+
+;------------------------------------------------------------------------------
+; BROADCAST xmm_dst, r_src
+;------------------------------------------------------------------------------
+
+%macro BROADCAST 2
+    movd %1, %2
+    punpcklwd %1, %1
+    pshufd %1, %1, 0
+%endmacro
 
 ;------------------------------------------------------------------------------
 ; void fill_solid_tile16( uint8_t *buf, ptrdiff_t stride );
@@ -61,19 +70,19 @@ cglobal fill_solid_tile32, 2,2,1
 
 
 ;------------------------------------------------------------------------------
-; CALC_LINE dst, src, delta, zero, full, tmp, tile_order
+; CALC_LINE tile_order, dst, src, delta, zero, full, tmp
 ;------------------------------------------------------------------------------
 
 %macro CALC_LINE 7
-    movaps xmm%1, %2
-    movaps xmm%6, %2
-    pmaxsw xmm%1, %4
-    pminsw xmm%1, %5
-    paddw xmm%6, %3
-    pmaxsw xmm%6, %4
-    pminsw xmm%6, %5
-    paddw xmm%1, xmm%6
-    psraw xmm%1, 7 - %7
+    movaps xmm%2, %3
+    movaps xmm%7, %3
+    pmaxsw xmm%2, %5
+    pminsw xmm%2, %6
+    paddw xmm%7, %4
+    pmaxsw xmm%7, %5
+    pminsw xmm%7, %6
+    paddw xmm%2, xmm%7
+    psraw xmm%2, 7 - %1
 %endmacro
 
 ;------------------------------------------------------------------------------
@@ -132,11 +141,8 @@ cglobal fill_solid_tile32, 2,2,1
         sar r6d, 1
         sub r4d, r6d
 
-        movdqa xmm0, [bcast_word]
-        movd xmm1, r4d  ; cc
-        pshufb xmm1, xmm0  ; SSSE3
-        movd xmm2, r2d  ; aa
-        pshufb xmm2, xmm0  ; SSSE3
+        BROADCAST xmm1, r4d  ; cc
+        BROADCAST xmm2, r2d  ; aa
         movdqa xmm3, xmm2
         pmullw xmm2, [words_index]
         psubw xmm1, xmm2  ; cc - aa * i
@@ -156,26 +162,22 @@ cglobal fill_solid_tile32, 2,2,1
         cmovg r4d, r5d
         add r4d, 2
         sar r4d, 2  ; delta
-        movd xmm2, r4d
-        pshufb xmm2, xmm0  ; SSSE3
+        BROADCAST xmm2, r4d
         psubw xmm1, xmm2  ; c1 = cc - aa * i - delta
         paddw xmm2, xmm2  ; 2 * delta
 
         imul r2d, r2d, (1 << %1) - 8
         sub r3d, r2d  ; bb - (tile_size - 8) * aa
         %if ARCH_X86_64
-            movd xmm8, r3d
-            pshufb xmm8, xmm0  ; SSSE3
+            BROADCAST xmm8, r3d
         %else
             and r3d, 0xFFFF
-            mov r2d, r3d
-            shl r2d, 16
-            or r2d, r3d
+            imul r3d, 0x10001
         %endif
 
         pxor xmm0, xmm0
         movdqa xmm4, [words_tile%2]
-        mov r3d, (1 << %1)
+        mov r2d, (1 << %1)
         jmp .loop_entry
 
         .loop_start
@@ -183,7 +185,7 @@ cglobal fill_solid_tile32, 2,2,1
             %if ARCH_X86_64
                 psubw xmm1, xmm8
             %else
-                movd xmm7, r2d
+                movd xmm7, r3d
                 pshufd xmm7, xmm7, 0
                 psubw xmm1, xmm7
             %endif
@@ -193,14 +195,14 @@ cglobal fill_solid_tile32, 2,2,1
                 %if i > 0
                     psubw xmm1, xmm3
                 %endif
-                CALC_LINE 5, xmm1,xmm2, xmm0,xmm4, 7, %1
+                CALC_LINE %1, 5, xmm1,xmm2, xmm0,xmm4, 7
                 psubw xmm1, xmm3
-                CALC_LINE 6, xmm1,xmm2, xmm0,xmm4, 7, %1
+                CALC_LINE %1, 6, xmm1,xmm2, xmm0,xmm4, 7
                 packuswb xmm5, xmm6
                 movaps [r0 + i], xmm5
                 %assign i i + 16
             %endrep
-            sub r3d,1
+            sub r2d,1
             jnz .loop_start
         RET
 %endmacro
@@ -238,6 +240,31 @@ FILL_HALFPLANE_TILE 5,32
 %assign SEGFLAG_EXACT_RIGHT  1 << 3
 %assign SEGFLAG_EXACT_BOTTOM 1 << 4
 %assign SEGFLAG_EXACT_TOP    1 << 5
+
+;------------------------------------------------------------------------------
+; ZEROFILL dst, size/16, tmp1
+;------------------------------------------------------------------------------
+
+%macro ZEROFILL 3
+    mov r%3, (%2) / 8
+    .zerofill_loop
+        movaps [r%1 + 0x00], xmm_zero
+        movaps [r%1 + 0x10], xmm_zero
+        movaps [r%1 + 0x20], xmm_zero
+        movaps [r%1 + 0x30], xmm_zero
+        movaps [r%1 + 0x40], xmm_zero
+        movaps [r%1 + 0x50], xmm_zero
+        movaps [r%1 + 0x60], xmm_zero
+        movaps [r%1 + 0x70], xmm_zero
+        add r%1, 0x80
+        sub r%3, 1
+        jnz .zerofill_loop
+    %assign i 0
+    %rep (%2) & 7
+        movaps [r%1 + i], xmm_zero
+        %assign i i + 16
+    %endrep
+%endmacro
 
 ;------------------------------------------------------------------------------
 ; CALC_DELTA_FLAG res, line, tmp1, tmp2
@@ -303,8 +330,7 @@ FILL_HALFPLANE_TILE 5,32
         cmovg r%5d, r%6d
         add r%5d, 1 << (14 - %1)
         shl r%5d, 2 * %1 - 5  ; w
-        movd xmm%12, r%5d
-        pshufb xmm%12, xmm_bcast  ; SSSE3
+        BROADCAST xmm%12, r%5d
 
         mov r%6d, r_abs_b
         imul r%6d, r%3d
@@ -335,15 +361,12 @@ FILL_HALFPLANE_TILE 5,32
     imul r%4d, r%5d
     sar r%4d, 16
     sub r%4d, r%3d  ; -offs1
-    movd xmm%7, r%4d
-    pshufb xmm%7, xmm_bcast  ; SSSE3
+    BROADCAST xmm%7, r%4d
     imul r%6d, r%5d
     sar r%6d, 16  ; offs2 - offs1
-    movd xmm%8, r%6d
-    pshufb xmm%8, xmm_bcast  ; SSSE3
+    BROADCAST xmm%8, r%6d
     add r%3d, r%3d
-    movd xmm%9, r%3d
-    pshufb xmm%9, xmm_bcast  ; SSSE3
+    BROADCAST xmm%9, r%3d
     %if ARCH_X86_64 == 0
         imul r%5d, 0x10001
     %endif
@@ -377,6 +400,42 @@ FILL_HALFPLANE_TILE 5,32
 %endmacro
 
 ;------------------------------------------------------------------------------
+; SAVE_RESULT tile_order, buf, stride, src, delta,
+;             tmp6, tmp7, xmm8, xmm9, xmm10, xmm11
+;------------------------------------------------------------------------------
+
+%macro SAVE_RESULT 11
+    mov r%6d, 1 << %1
+    xor r%7d, r%7d
+    .save_loop
+        add r%7w, [r%5]
+        BROADCAST xmm%10, r%7d
+        add r%5, 2
+
+        %assign i 0
+        %rep (1 << %1) / 16
+            movaps xmm%8, [r%4 + 2 * i]
+            paddw xmm%8, xmm%10
+            pxor xmm%11, xmm%11
+            psubw xmm%11, xmm%8
+            pmaxsw xmm%8, xmm%11
+            movaps xmm%9, [r%4 + 2 * i + 16]
+            paddw xmm%9, xmm%10
+            pxor xmm%11, xmm%11
+            psubw xmm%11, xmm%9
+            pmaxsw xmm%9, xmm%11
+            packuswb xmm%8, xmm%9
+            movaps [r%2 + i], xmm%8
+            %assign i i + 16
+        %endrep
+
+        add r%2, r%3
+        add r%4, 2 << %1
+        sub r%6d, 1
+        jnz .save_loop
+%endmacro
+
+;------------------------------------------------------------------------------
 ; FILL_GENERIC_TILE tile_order, suffix
 ; void fill_generic_tile%2( uint8_t *buf, ptrdiff_t stride,
 ;                           const struct Segment *line, size_t n_lines,
@@ -389,13 +448,12 @@ FILL_HALFPLANE_TILE 5,32
     %assign tile_size 1 << %1
     %define xmm_zero  xmm0
     %define xmm_full  xmm1
-    %define xmm_bcast xmm2
-    %define xmm_index xmm3
-    %define xmm_va8   xmm4
-    %define xmm_vba   xmm5
-    %define xmm_c     xmm6
+    %define xmm_index xmm2
+    %define xmm_va8   xmm3
+    %define xmm_vba   xmm4
+    %define xmm_c     xmm5
 
-    cglobal fill_generic_tile%2, 5,15,13
+    cglobal fill_generic_tile%2, 5,15,12
         %assign alloc_size 2 * tile_size * (tile_size + 1) + 4
         %if HAVE_ALIGNED_STACK
             %assign alloc_size ((alloc_size + stack_offset + gprsize + 15) & ~15) - stack_offset - gprsize
@@ -404,7 +462,6 @@ FILL_HALFPLANE_TILE 5,32
         %endif
         SUB rstk, alloc_size
 
-        pxor xmm_zero, xmm_zero
         %assign n tile_size * (tile_size + 1) / 8
         %if HAVE_ALIGNED_STACK
             mov r6, rstk
@@ -413,24 +470,8 @@ FILL_HALFPLANE_TILE 5,32
             lea r6, [rstk + 15]
             and r6, ~15
         %endif
-        mov r5d, n / 8
-        .zerofill_loop
-            movaps [r6 + 0x00], xmm_zero
-            movaps [r6 + 0x10], xmm_zero
-            movaps [r6 + 0x20], xmm_zero
-            movaps [r6 + 0x30], xmm_zero
-            movaps [r6 + 0x40], xmm_zero
-            movaps [r6 + 0x50], xmm_zero
-            movaps [r6 + 0x60], xmm_zero
-            movaps [r6 + 0x70], xmm_zero
-            add r6, 0x80
-            sub r5d, 1
-            jnz .zerofill_loop
-        %assign i 0
-        %rep n & 7
-            movaps [r6 + (i & 0x7F)], xmm_zero
-            %assign i i + 16
-        %endrep
+        pxor xmm_zero, xmm_zero
+        ZEROFILL 6, n, 5
 
         shl r4d, 8
         %assign delta_offs 2 * tile_size * tile_size
@@ -439,7 +480,6 @@ FILL_HALFPLANE_TILE 5,32
         %endif
         mov [rstk + delta_offs], r4w
 
-        movdqa xmm_bcast, [bcast_word]
         movdqa xmm_index, [words_index]
         movdqa xmm_full, [words_tile%2]
 
@@ -486,14 +526,12 @@ FILL_HALFPLANE_TILE 5,32
             mov r10d, r12d
             imul r10d, r8d
             sub r13d, r10d ; c
-            movd xmm_c, r13d
-            pshufb xmm_c, xmm_bcast  ; SSSE3
+            BROADCAST xmm_c, r13d
 
-            movd xmm7, r11d  ; a
-            pshufb xmm7, xmm_bcast  ; SSSE3
-            movdqa xmm_va8, xmm7
-            pmullw xmm7, xmm_index
-            psubw xmm_c, xmm7  ; c - a * i
+            BROADCAST xmm6, r11d  ; a
+            movdqa xmm_va8, xmm6
+            pmullw xmm6, xmm_index
+            psubw xmm_c, xmm6  ; c - a * i
             psllw xmm_va8, 3  ; 8 * a
 
             mov r10d, r11d
@@ -523,8 +561,7 @@ FILL_HALFPLANE_TILE 5,32
             cmp r8, r9
             jz .single_line
 
-            movd xmm_vba, r_b
-            pshufb xmm_vba, xmm_bcast  ; SSSE3
+            BROADCAST xmm_vba, r_b
             %rep (1 << %1) / 8 - 1
                 psubw xmm_vba, xmm_va8  ; b - (tile_size - 8) * a
             %endrep
@@ -534,7 +571,7 @@ FILL_HALFPLANE_TILE 5,32
             mov r10d, 64
             sub r10d, r6d  ; 64 - dn_pos
             add r6d, 64  ; 64 + dn_pos
-            FILL_BORDER_LINE %1, r8, 10,6, 4,5, 7,8,9,10,11,12
+            FILL_BORDER_LINE %1, r8,10,6, 4,5, 6,7,8,9,10,11
             psubw xmm_c, xmm_vba
             add r8, 2 << %1
             cmp r8, r9
@@ -552,29 +589,27 @@ FILL_HALFPLANE_TILE 5,32
             sar r5d, 2  ; dc
             sub r4d, r5d  ; base - dc
             add r5d, r5d  ; 2 * dc
-            movd xmm7, r4d
-            pshufb xmm7, xmm_bcast  ; SSSE3
-            movd xmm8, r5d
-            pshufb xmm8, xmm_bcast  ; SSSE3
+            BROADCAST xmm6, r4d
+            BROADCAST xmm7, r5d
 
-            paddw xmm_c, xmm7
+            paddw xmm_c, xmm6
             .internal_loop
                 %assign i 0
                 %rep (1 << %1) / 8
                     %if i
                         psubw xmm_c, xmm_va8
                     %endif
-                    CALC_LINE 9, xmm_c,xmm8, xmm_zero,xmm_full, 10, %1
-                    movaps xmm10, [r8 + i]
-                    paddw xmm9, xmm10
-                    movaps [r8 + i], xmm9
+                    CALC_LINE %1, 8, xmm_c,xmm7, xmm_zero,xmm_full, 9
+                    movaps xmm9, [r8 + i]
+                    paddw xmm8, xmm9
+                    movaps [r8 + i], xmm8
                     %assign i i + 16
                 %endrep
                 psubw xmm_c, xmm_vba
                 add r8, 2 << %1
                 cmp r8, r9
                 jl .internal_loop
-            psubw xmm_c, xmm7
+            psubw xmm_c, xmm6
 
         .end_loop
             test r7d, r7d
@@ -584,7 +619,7 @@ FILL_HALFPLANE_TILE 5,32
             mov r10d, r7d
             sub r10d, r6d  ; up_pos - dn_pos
             add r6d, r7d  ; up_pos + dn_pos
-            FILL_BORDER_LINE %1, r8, 10,6, 4,5, 7,8,9,10,11,12
+            FILL_BORDER_LINE %1, r8,10,6, 4,5, 6,7,8,9,10,11
 
         .end_line_loop
             add r2, SIZEOF_SEGMENT
@@ -597,32 +632,8 @@ FILL_HALFPLANE_TILE 5,32
             lea r2, [rstk + 15]
             and r2, ~15
         %endif
-        mov r3d, 1 << %1
-        lea r4, [rstk + delta_offs]
-        xor r5d, r5d
-        .fill_loop
-            add r5w, [r4]
-            movd xmm7, r5d
-            pshufb xmm7, xmm_bcast  ; SSSE3
-            add r4, 2
-
-            %assign i 0
-            %rep (1 << %1) / 16
-                movaps xmm5, [r2 + 2 * i]
-                paddw xmm5, xmm7
-                pabsw xmm5, xmm5
-                movaps xmm6, [r2 + 2 * i + 16]
-                paddw xmm6, xmm7
-                pabsw xmm6, xmm6
-                packuswb xmm5, xmm6
-                movaps [r0 + i], xmm5
-                %assign i i + 16
-            %endrep
-
-            add r0, r1
-            add r2, 2 << %1
-            sub r3d,1
-            jnz .fill_loop
+        lea r3, [rstk + delta_offs]
+        SAVE_RESULT %1, 0,1,2,3, 4,5, 0,1,2,3
         ADD rstk, alloc_size
         RET
 %endmacro
@@ -649,7 +660,6 @@ FILL_HALFPLANE_TILE 5,32
         %endif
         SUB rstk, alloc_size
 
-        pxor xmm_zero, xmm_zero
         %assign n tile_size * (tile_size + 1) / 8
         %if HAVE_ALIGNED_STACK
             mov r6, rstk
@@ -658,24 +668,8 @@ FILL_HALFPLANE_TILE 5,32
             lea r6, [rstk + 15]
             and r6, ~15
         %endif
-        mov r5d, n / 8
-        .zerofill_loop
-            movaps [r6 + 0x00], xmm_zero
-            movaps [r6 + 0x10], xmm_zero
-            movaps [r6 + 0x20], xmm_zero
-            movaps [r6 + 0x30], xmm_zero
-            movaps [r6 + 0x40], xmm_zero
-            movaps [r6 + 0x50], xmm_zero
-            movaps [r6 + 0x60], xmm_zero
-            movaps [r6 + 0x70], xmm_zero
-            add r6, 0x80
-            sub r5d, 1
-            jnz .zerofill_loop
-        %assign i 0
-        %rep n & 7
-            movaps [r6 + i], xmm_zero
-            %assign i i + 16
-        %endrep
+        pxor xmm_zero, xmm_zero
+        ZEROFILL 6, n, 5
 
         mov r4w, r4m
         shl r4d, 8
@@ -744,19 +738,15 @@ FILL_HALFPLANE_TILE 5,32
             add r2d, 1 << (13 + %1)
             sar r2d, 14 + %1  ; a
 
-            movdqa xmm_bcast, [bcast_word]
-
             mov r0d, r2d
             sar r0d, 1
             sub r4d, r0d
             mov r0d, r3d
             imul r0d, r5d
             sub r4d, r0d ; c
-            movd xmm_c, r4d
-            pshufb xmm_c, xmm_bcast  ; SSSE3
+            BROADCAST xmm_c, r4d
 
-            movd xmm3, r2d  ; a
-            pshufb xmm3, xmm_bcast  ; SSSE3
+            BROADCAST xmm3, r2d  ; a
             movdqa xmm_va8, xmm3
             pmullw xmm3, xmm_index
             psubw xmm_c, xmm3  ; c - a * i
@@ -788,18 +778,15 @@ FILL_HALFPLANE_TILE 5,32
             cmp r5, up_addr
             jz .single_line
 
-            ;test r6d, r6d
-            ;jz .generic_fist
+            test r6d, r6d
+            jz .generic_fist
             mov r4d, 64
             sub r4d, r6d  ; 64 - dn_pos
             add r6d, 64  ; 64 + dn_pos
             FILL_BORDER_LINE %1, r5, 4,6, 0,1, 3,4,5,6,7,--
 
-            movdqa xmm_bcast, [bcast_word]
             mov r6, up_addr
-
-            movd xmm_vba, r_b
-            pshufb xmm_vba, xmm_bcast  ; SSSE3
+            BROADCAST xmm_vba, r_b
             %rep (1 << %1) / 8 - 1
                 psubw xmm_vba, xmm_va8  ; b - (tile_size - 8) * a
             %endrep
@@ -808,8 +795,16 @@ FILL_HALFPLANE_TILE 5,32
             add r5, 2 << %1
             cmp r5, r6
             jge .end_loop
+            jmp .bulk_fill
 
         .generic_fist
+            mov r6, up_addr
+            BROADCAST xmm_vba, r_b
+            %rep (1 << %1) / 8 - 1
+                psubw xmm_vba, xmm_va8  ; b - (tile_size - 8) * a
+            %endrep
+
+        .bulk_fill
             mov r0d, 1 << (13 - %1)
             mov r4d, r_b
             sar r4d, 1
@@ -823,8 +818,7 @@ FILL_HALFPLANE_TILE 5,32
             sub r0w, r1w  ; base - dc
             add r1d, r1d  ; 2 * dc
             imul r0d, 0x10001
-            movd xmm5, r1d
-            pshufb xmm5, xmm_bcast  ; SSSE3
+            BROADCAST xmm5, r1d
 
             movdqa xmm_full, [words_tile%2]
 
@@ -837,7 +831,7 @@ FILL_HALFPLANE_TILE 5,32
                     %if i
                         psubw xmm_c, xmm_va8
                     %endif
-                    CALC_LINE 6, xmm_c,xmm5, xmm_zero,xmm_full, 7, %1
+                    CALC_LINE %1, 6, xmm_c,xmm5, xmm_zero,xmm_full, 7
                     movaps xmm7, [r5 + i]
                     paddw xmm6, xmm7
                     movaps [r5 + i], xmm6
@@ -852,15 +846,18 @@ FILL_HALFPLANE_TILE 5,32
             psubw xmm_c, xmm7
 
         .end_loop
-            ;test r7d, r7d
-            ;jz .end_line_loop
-            xor r6d, r6d
-            movdqa xmm_bcast, [bcast_word]
+            mov r4d, up_pos
+            test r4d, r4d
+            jz .end_line_loop
+            mov r6d, r4d
+            jmp .last_line
+
         .single_line
             mov r0d, up_pos
             mov r4d, r0d
             sub r4d, r6d  ; up_pos - dn_pos
             add r6d, r0d  ; up_pos + dn_pos
+        .last_line
             FILL_BORDER_LINE %1, r5, 4,6, 0,1, 3,4,5,6,7,--
 
         .end_line_loop
@@ -870,40 +867,14 @@ FILL_HALFPLANE_TILE 5,32
 
         mov r0, r0m
         mov r1, r1m
-        movdqa xmm_bcast, [bcast_word]
-
         %if HAVE_ALIGNED_STACK
             mov r2, rstk
         %else
             lea r2, [rstk + 15]
             and r2, ~15
         %endif
-        mov r3d, 1 << %1
-        lea r4, [rstk + delta_offs]
-        xor r5d, r5d
-        .fill_loop
-            add r5w, [r4]
-            movd xmm0, r5d
-            pshufb xmm0, xmm_bcast  ; SSSE3
-            add r4, 2
-
-            %assign i 0
-            %rep (1 << %1) / 16
-                movaps xmm1, [r2 + 2 * i]
-                paddw xmm1, xmm0
-                pabsw xmm1, xmm1
-                movaps xmm2, [r2 + 2 * i + 16]
-                paddw xmm2, xmm0
-                pabsw xmm2, xmm2
-                packuswb xmm1, xmm2
-                movaps [r0 + i], xmm1
-                %assign i i + 16
-            %endrep
-
-            add r0, r1
-            add r2, 2 << %1
-            sub r3d, 1
-            jnz .fill_loop
+        lea r3, [rstk + delta_offs]
+        SAVE_RESULT %1, 0,1,2,3, 4,5, 0,1,2,3
         ADD rstk, alloc_size
         RET
 %endmacro
