@@ -220,23 +220,17 @@ FILL_HALFPLANE_TILE 5,32
 ; };
 ;------------------------------------------------------------------------------
 
-%assign SEGOFFS_X_MIN  4 * 0
-%assign SEGOFFS_X_MAX  4 * 1
-%assign SEGOFFS_Y_MIN  4 * 2
-%assign SEGOFFS_Y_MAX  4 * 3
-%assign SEGOFFS_A      4 * 4
-%assign SEGOFFS_B      4 * 5
-%assign SEGOFFS_SCALE  4 * 6
-%assign SEGOFFS_FLAGS  4 * 7
-%assign SEGOFFS_C      4 * 8
-%assign SIZEOF_SEGMENT 4 * 10
-
-%assign SEGFLAG_UP           1 << 0
-%assign SEGFLAG_UR_DL        1 << 1
-%assign SEGFLAG_EXACT_LEFT   1 << 2
-%assign SEGFLAG_EXACT_RIGHT  1 << 3
-%assign SEGFLAG_EXACT_BOTTOM 1 << 4
-%assign SEGFLAG_EXACT_TOP    1 << 5
+struc line
+    .x_min: resd 1
+    .x_max: resd 1
+    .y_min: resd 1
+    .y_max: resd 1
+    .a: resd 1
+    .b: resd 1
+    .scale: resd 1
+    .flags: resd 1
+    .c: resq 1
+endstruc
 
 ;------------------------------------------------------------------------------
 ; ZEROFILL dst, size/16, tmp1
@@ -268,12 +262,12 @@ FILL_HALFPLANE_TILE 5,32
 ;------------------------------------------------------------------------------
 
 %macro CALC_DELTA_FLAG 4
-    mov r%3d, [%2 + SEGOFFS_FLAGS]
+    mov r%3d, [%2 + line.flags]
     xor r%4d, r%4d
-    cmp r%4d, [%2 + SEGOFFS_X_MIN]
+    cmp r%4d, [%2 + line.x_min]
     cmovz r%4d, r%3d
     xor r%1d, r%1d
-    test r%3d, SEGFLAG_UR_DL
+    test r%3d, 2  ; SEGFLAG_UR_DL
     cmovnz r%1d, r%4d
     shl r%3d, 2
     xor r%1d, r%3d
@@ -553,13 +547,13 @@ cglobal fill_generic_tile%2, 0,7,8
 %else
     %define r_line r3
     mov r_line, r2m
-    lea r_tmp0_, [r_line + SIZEOF_SEGMENT]
+    lea r_tmp0_, [r_line + line_size]
     mov r2m, r_tmp0_
 %endif
     CALC_DELTA_FLAG _tmp0_, r_line, 4,5
 
-    mov r4d, [r_line + SEGOFFS_Y_MIN]
-    mov r5d, [r_line + SEGOFFS_Y_MAX]
+    mov r4d, [r_line + line.y_min]
+    mov r5d, [r_line + line.y_max]
 %if ARCH_X86_64
     mov r8d, r4d
     mov r6d, r4d
@@ -600,11 +594,11 @@ cglobal fill_generic_tile%2, 0,7,8
     DEF_REG_NAME b, 12
     DEF_REG_NAME c, 13
 
-    movsxd r_a_q, dword [r2 + SEGOFFS_A]
-    movsxd r_b_q, dword [r2 + SEGOFFS_B]
-    mov r_c_q, [r2 + SEGOFFS_C]
+    movsxd r_a_q, dword [r2 + line.a]
+    movsxd r_b_q, dword [r2 + line.b]
+    mov r_c_q, [r2 + line.c]
     sar r_c_q, 7 + %1  ; c >> (tile_order + 7)
-    movsxd r_tmp0_q, dword [r2 + SEGOFFS_SCALE]
+    movsxd r_tmp0_q, dword [r2 + line.scale]
     mov r_tmp1_q, 1 << (45 + %1)
     imul r_a_q, r_tmp0_q
     add r_a_q, r_tmp1_q
@@ -621,9 +615,9 @@ cglobal fill_generic_tile%2, 0,7,8
     DEF_REG_NAME b, 3
     DEF_REG_NAME c, 5
 
-    mov r0d, [r3 + SEGOFFS_C]
-    mov r2d, [r3 + SEGOFFS_C + 4]
-    mov r1d, [r3 + SEGOFFS_SCALE]
+    mov r0d, [r3 + line.c]
+    mov r2d, [r3 + line.c + 4]
+    mov r1d, [r3 + line.scale]
     shr r0d, 7 + %1
     shl r2d, 25 - %1
     or r0d, r2d  ; r0d (eax) = c >> (tile_order + 7)
@@ -631,11 +625,11 @@ cglobal fill_generic_tile%2, 0,7,8
     add r2d, 1 << 12
     sar r2d, 13
     mov r_c, r2d
-    mov r0d, [r3 + SEGOFFS_B]  ; r0d (eax)
+    mov r0d, [r3 + line.b]  ; r0d (eax)
     imul r1d  ; r2d (edx) = b * scale >> 32
     add r2d, 1 << (13 + %1)
     sar r2d, 14 + %1
-    mov r0d, [r3 + SEGOFFS_A]  ; r0d (eax)
+    mov r0d, [r3 + line.a]  ; r0d (eax)
     mov r_b, r2d
     imul r1d  ; r_a (edx) = a * scale >> 32
     add r_a, 1 << (13 + %1)
@@ -806,7 +800,7 @@ cglobal fill_generic_tile%2, 0,7,8
 
 .end_line_loop
 %if ARCH_X86_64
-    add r2, SIZEOF_SEGMENT
+    add r2, line_size
     sub r3, 1
 %else
     sub dword r3m, 1
