@@ -93,21 +93,21 @@ cglobal fill_solid_tile32, 2,2,1
 %macro FILL_HALFPLANE_TILE 2
 %if ARCH_X86_64
 cglobal fill_halfplane_tile%2, 6,7,9
-    movsxd r2q, r2d  ; a
-    movsxd r3q, r3d  ; b
-    sar r4q, 7 + %1  ; c >> (tile_order + 7)
-    movsxd r5q, r5d  ; scale
-    mov r6q, 1 << (45 + %1)
-    imul r2q, r5q
-    add r2q, r6q
-    sar r2q, 46 + %1  ; aa
-    imul r3q, r5q
-    add r3q, r6q
-    sar r3q, 46 + %1  ; bb
-    imul r4q, r5q
-    shr r6q, 1 + %1
-    add r4q, r6q
-    sar r4q, 45  ; cc
+    movsxd r2, r2d  ; a
+    movsxd r3, r3d  ; b
+    sar r4, 7 + %1  ; c >> (tile_order + 7)
+    movsxd r5, r5d  ; scale
+    mov r6, 1 << (45 + %1)
+    imul r2, r5
+    add r2, r6
+    sar r2, 46 + %1  ; aa
+    imul r3, r5
+    add r3, r6
+    sar r3, 46 + %1  ; bb
+    imul r4, r5
+    shr r6, 1 + %1
+    add r4, r6
+    sar r4, 45  ; cc
 %else
 cglobal fill_halfplane_tile%2, 0,7,8
     mov r0d, r4m  ; c_lo
@@ -237,22 +237,22 @@ endstruc
 ;------------------------------------------------------------------------------
 
 %macro ZEROFILL 3
-    mov r%3, (%2) / 8
+    mov %3, (%2) / 8
 %%zerofill_loop:
-    movaps [r%1 + 0x00], xmm_zero
-    movaps [r%1 + 0x10], xmm_zero
-    movaps [r%1 + 0x20], xmm_zero
-    movaps [r%1 + 0x30], xmm_zero
-    movaps [r%1 + 0x40], xmm_zero
-    movaps [r%1 + 0x50], xmm_zero
-    movaps [r%1 + 0x60], xmm_zero
-    movaps [r%1 + 0x70], xmm_zero
-    add r%1, 0x80
-    sub r%3, 1
+    movaps [%1 + 0x00], xmm_zero
+    movaps [%1 + 0x10], xmm_zero
+    movaps [%1 + 0x20], xmm_zero
+    movaps [%1 + 0x30], xmm_zero
+    movaps [%1 + 0x40], xmm_zero
+    movaps [%1 + 0x50], xmm_zero
+    movaps [%1 + 0x60], xmm_zero
+    movaps [%1 + 0x70], xmm_zero
+    add %1, 0x80
+    sub %3, 1
     jnz %%zerofill_loop
 %assign %%i 0
 %rep (%2) & 7
-    movaps [r%1 + %%i], xmm_zero
+    movaps [%1 + %%i], xmm_zero
 %assign %%i %%i + 16
 %endrep
 %endmacro
@@ -262,19 +262,19 @@ endstruc
 ;------------------------------------------------------------------------------
 
 %macro CALC_DELTA_FLAG 4
-    mov r%3d, [%2 + line.flags]
-    xor r%4d, r%4d
-    cmp r%4d, [%2 + line.x_min]
-    cmovz r%4d, r%3d
-    xor r%1d, r%1d
-    test r%3d, 2  ; SEGFLAG_UR_DL
-    cmovnz r%1d, r%4d
-    shl r%3d, 2
-    xor r%1d, r%3d
-    and r%4d, 4
-    and r%1d, 4
-    lea r%1d, [r%1d + 2 * r%1d]
-    xor r%1d, r%4d  ; bit 3 - dn_delta, bit 2 - up_delta
+    mov %3d, [%2 + line.flags]
+    xor %4d, %4d
+    cmp %4d, [%2 + line.x_min]
+    cmovz %4d, %3d
+    xor %1d, %1d
+    test %3d, 2  ; SEGFLAG_UR_DL
+    cmovnz %1d, %4d
+    shl %3d, 2
+    xor %1d, %3d
+    and %4d, 4
+    and %1d, 4
+    lea %1d, [%1d + 2 * %1d]
+    xor %1d, %4d  ; bit 3 - dn_delta, bit 2 - up_delta
 %endmacro
 
 ;------------------------------------------------------------------------------
@@ -294,79 +294,79 @@ endstruc
     %error "up/dn expected!"
 %endif
 
-    test r%3d, %%flag
+    test %3d, %%flag
     jz %%skip
-    lea r%5d, [4 * r%4d - 256]
-    %%opi [%2], r%5w
-    lea r%5d, [4 * r%4d]
-    %%op [%2 + 2], r%5w
+    lea %5d, [4 * %4d - 256]
+    %%opi [%2], %5w
+    lea %5d, [4 * %4d]
+    %%op [%2 + 2], %5w
 %%skip:
 %endmacro
 
 ;------------------------------------------------------------------------------
-; CALC_VBA tile_order
+; CALC_VBA tile_order, b
 ;------------------------------------------------------------------------------
 
-%macro CALC_VBA 1
-    BROADCAST xmm_vba, r_b
+%macro CALC_VBA 2
+    BROADCAST xmm_vba, %2d
 %rep (1 << %1) / 8 - 1
     psubw xmm_vba, xmm_va8  ; b - (tile_size - 8) * a
 %endrep
 %endmacro
 
 ;------------------------------------------------------------------------------
-; FILL_BORDER_LINE tile_order, res, size, sum,
-;                  tmp5, tmp6, xmm7, xmm8, xmm9, xmm10, xmm11, [xmm12]
+; FILL_BORDER_LINE tile_order, res, abs_a(abs_ab), b, [abs_b], size, sum,
+;                  tmp8, tmp9, xmm10, xmm11, xmm12, xmm13, xmm14, [xmm15]
 ;------------------------------------------------------------------------------
 
-%macro FILL_BORDER_LINE 12
-    mov r%5d, r%3d
-    shl r%5d, 8 - %1  ; size << (8 - tile_order)
-    xor r%6d, r%6d
+%macro FILL_BORDER_LINE 15
+    mov %8d, %6d
+    shl %8d, 8 - %1  ; size << (8 - tile_order)
+    xor %9d, %9d
 %if ARCH_X86_64
-    sub r%5d, r_abs_a
-    cmovg r%5d, r%6d
-    add r%5d, 1 << (14 - %1)
-    shl r%5d, 2 * %1 - 5  ; w
-    BROADCAST xmm%12, r%5d
+    sub %8d, %3d  ; abs_a
+    cmovg %8d, %9d
+    add %8d, 1 << (14 - %1)
+    shl %8d, 2 * %1 - 5  ; w
+    BROADCAST xmm%15, %8d
 
-    mov r%6d, r_abs_b
-    imul r%6d, r%3d
-    sar r%6d, 6  ; dc_b
-    cmp r%6d, r_abs_a
-    cmovg r%6d, r_abs_a
+    mov %9d, %5d  ; abs_b
+    imul %9d, %6d
+    sar %9d, 6  ; dc_b
+    cmp %9d, %3d  ; abs_a
+    cmovg %9d, %3d
 %else
-    sub r%5w, r_abs_a
-    cmovg r%5d, r%6d
-    add r%5w, 1 << (14 - %1)
-    shl r%5d, 2 * %1 - 5  ; w
+    sub %8w, %3w  ; abs_a
+    cmovg %8d, %9d
+    add %8w, 1 << (14 - %1)
+    shl %8d, 2 * %1 - 5  ; w
 
-    mov r%6d, r_abs_ab
-    shr r%6d, 16  ; abs_b
-    imul r%6d, r%3d
-    sar r%6d, 6  ; dc_b
-    cmp r%6w, r_abs_a
-    cmovg r%6w, r_abs_a
+    mov %9d, %3d  ; abs_ab
+    shr %9d, 16  ; abs_b
+    imul %9d, %6d
+    sar %9d, 6  ; dc_b
+    cmp %9w, %3w
+    cmovg %9w, %3w
 %endif
-    add r%6d, 2
-    sar r%6d, 2  ; dc
+    add %9d, 2
+    sar %9d, 2  ; dc
 
-    imul r%4d, r_b  ; b * sum
-    sar r%4d, 7  ; b * avg
-    add r%4d, r%6d  ; b * avg + dc
-    add r%6d, r%6d  ; 2 * dc
+    imul %7d, %4d  ; sum * b
+    sar %7d, 7  ; avg * b
+    add %7d, %9d  ; avg * b + dc
+    add %9d, %9d  ; 2 * dc
 
-    imul r%4d, r%5d
-    sar r%4d, 16
-    sub r%4d, r%3d  ; -offs1
-    BROADCAST xmm%7, r%4d
-    imul r%6d, r%5d
-    sar r%6d, 16  ; offs2 - offs1
-    BROADCAST xmm%8, r%6d
-    add r%3d, r%3d
-    BROADCAST xmm%9, r%3d
+    imul %7d, %8d
+    sar %7d, 16
+    sub %7d, %6d  ; -offs1
+    BROADCAST xmm%10, %7d
+    imul %9d, %8d
+    sar %9d, 16  ; offs2 - offs1
+    BROADCAST xmm%11, %9d
+    add %6d, %6d
+    BROADCAST xmm%12, %6d
 %if ARCH_X86_64 == 0
-    imul r%5d, 0x10001
+    imul %8d, 0x10001
 %endif
 
 %assign %%i 0
@@ -374,25 +374,25 @@ endstruc
 %if %%i
     psubw xmm_c, xmm_va8
 %endif
-    movaps xmm%10, xmm_c
+    movaps xmm%13, xmm_c
 %if ARCH_X86_64
-    pmulhw xmm%10, xmm%12
+    pmulhw xmm%13, xmm%15
 %else
-    movd xmm%11, r%5d
-    pshufd xmm%11, xmm%11, 0
-    pmulhw xmm%10, xmm%11
+    movd xmm%14, %8d
+    pshufd xmm%14, xmm%14, 0
+    pmulhw xmm%13, xmm%14
 %endif
-    psubw xmm%10, xmm%7  ; c1
-    movaps xmm%11, xmm%10
-    paddw xmm%11, xmm%8  ; c2
-    pmaxsw xmm%10, xmm_zero
-    pminsw xmm%10, xmm%9
-    pmaxsw xmm%11, xmm_zero
-    pminsw xmm%11, xmm%9
-    paddw xmm%10, xmm%11
-    movaps xmm%11, [%2 + %%i]
-    paddw xmm%10, xmm%11
-    movaps [%2 + %%i], xmm%10
+    psubw xmm%13, xmm%10  ; c1
+    movaps xmm%14, xmm%13
+    paddw xmm%14, xmm%11  ; c2
+    pmaxsw xmm%13, xmm_zero
+    pminsw xmm%13, xmm%12
+    pmaxsw xmm%14, xmm_zero
+    pminsw xmm%14, xmm%12
+    paddw xmm%13, xmm%14
+    movaps xmm%14, [%2 + %%i]
+    paddw xmm%13, xmm%14
+    movaps [%2 + %%i], xmm%13
 %assign %%i %%i + 16
 %endrep
 %endmacro
@@ -403,50 +403,34 @@ endstruc
 ;------------------------------------------------------------------------------
 
 %macro SAVE_RESULT 11
-    mov r%6d, 1 << %1
-    xor r%7d, r%7d
+    mov %6d, 1 << %1
+    xor %7d, %7d
 %%save_loop:
-    add r%7w, [r%5]
-    BROADCAST xmm%10, r%7d
-    add r%5, 2
+    add %7w, [%5]
+    BROADCAST xmm%10, %7d
+    add %5, 2
 
 %assign %%i 0
 %rep (1 << %1) / 16
-    movaps xmm%8, [r%4 + 2 * %%i]
+    movaps xmm%8, [%4 + 2 * %%i]
     paddw xmm%8, xmm%10
     pxor xmm%11, xmm%11
     psubw xmm%11, xmm%8
     pmaxsw xmm%8, xmm%11
-    movaps xmm%9, [r%4 + 2 * %%i + 16]
+    movaps xmm%9, [%4 + 2 * %%i + 16]
     paddw xmm%9, xmm%10
     pxor xmm%11, xmm%11
     psubw xmm%11, xmm%9
     pmaxsw xmm%9, xmm%11
     packuswb xmm%8, xmm%9
-    movaps [r%2 + %%i], xmm%8
+    movaps [%2 + %%i], xmm%8
 %assign %%i %%i + 16
 %endrep
 
-    add r%2, r%3
-    add r%4, 2 << %1
-    sub r%6d, 1
+    add %2, %3
+    add %4, 2 << %1
+    sub %6d, 1
     jnz %%save_loop
-%endmacro
-
-;------------------------------------------------------------------------------
-; DEF_REG_NAME name, index
-;------------------------------------------------------------------------------
-
-%macro DEFINE_INDIRECT 2
-    %define %1 %2
-%endmacro
-
-%macro DEF_REG_NAME 2
-    DEFINE_INDIRECT r_ %+ %1,       r %+ %2 %+ d
-    DEFINE_INDIRECT r_ %+ %1 %+ _,  r %+ %2
-    DEFINE_INDIRECT r_ %+ %1 %+ _w, r %+ %2 %+ w
-    DEFINE_INDIRECT r_ %+ %1 %+ _d, r %+ %2 %+ d
-    DEFINE_INDIRECT r_ %+ %1 %+ _q, r %+ %2 %+ q
 %endmacro
 
 ;------------------------------------------------------------------------------
@@ -456,23 +440,23 @@ endstruc
 
 %macro GET_RES_ADDR 1
 %if HAVE_ALIGNED_STACK
-    mov r%1, rstk
+    mov %1, rstk
 %else
-    lea r%1, [rstk + 15]
-    and r%1, ~15
+    lea %1, [rstk + 15]
+    and %1, ~15
 %endif
 %endmacro
 
 %macro CALC_RES_ADDR 3-4 noskip
-    shl r%2d, 1 + %1
+    shl %2d, 1 + %1
 %if HAVE_ALIGNED_STACK
-    add r%2, rstk
+    add %2, rstk
 %else
 %ifidn %4, noskip
-    lea r%3, [rstk + 15]
-    and r%3, ~15
+    lea %3, [rstk + 15]
+    and %3, ~15
 %endif
-    add r%2, r%3
+    add %2, %3
 %endif
 %endmacro
 
@@ -484,8 +468,20 @@ endstruc
 ;------------------------------------------------------------------------------
 
 %macro FILL_GENERIC_TILE 2
+    ; t3=line t4=dn/cur t5=up/end t6=up_pos t7=dn_pos
+    ; t8=a/abs_a/abs_ab t9=b t10=c/abs_b
 %if ARCH_X86_64
-cglobal fill_generic_tile%2, 5,14,12
+    DECLARE_REG_TMP 10,11,5,2, 4,9,6,7, 8,12,13
+%else
+    DECLARE_REG_TMP 0,1,5,3, 4,6,6,0, 2,3,5
+%endif
+
+    %assign tile_size 1 << %1
+    %assign delta_offs 2 * tile_size * tile_size
+    %assign alloc_size 2 * tile_size * (tile_size + 1) + 4
+    %assign buf_size tile_size * (tile_size + 1) / 8
+
+%if ARCH_X86_64
     %define xmm_zero  xmm6
     %define xmm_full  xmm7
     %define xmm_index xmm8
@@ -493,9 +489,8 @@ cglobal fill_generic_tile%2, 5,14,12
     %define xmm_vba   xmm10
     %define xmm_va8   xmm11
 
-    %assign alloc_size 0
+cglobal fill_generic_tile%2, 5,14,12
 %else
-cglobal fill_generic_tile%2, 0,7,8
     %define xmm_zero  xmm5
     %define xmm_va8   xmm6
     %define xmm_c     xmm7
@@ -504,24 +499,22 @@ cglobal fill_generic_tile%2, 0,7,8
     %define xmm_vba   xmm3
     %define xmm_full  xmm4
 
-    %assign alloc_size 8
+    %assign alloc_size alloc_size + 8
+cglobal fill_generic_tile%2, 0,7,8
 %endif
-    %assign tile_size 1 << %1
-    %assign delta_offs 2 * tile_size * tile_size
-    %assign alloc_size 2 * tile_size * (tile_size + 1) + 4 + alloc_size
-    %assign n tile_size * (tile_size + 1) / 8
+
 %if HAVE_ALIGNED_STACK
     %assign alloc_size ((alloc_size + stack_offset + gprsize + 15) & ~15) - stack_offset - gprsize
 %else
     %assign alloc_size alloc_size + 32
     %assign delta_offs delta_offs + 16
-    %assign n n + 1
+    %assign buf_size buf_size + 1
 %endif
     SUB rstk, alloc_size
 
-    GET_RES_ADDR 6
+    GET_RES_ADDR t0
     pxor xmm_zero, xmm_zero
-    ZEROFILL 6, n, 5
+    ZEROFILL t0, buf_size, t1
 
 %if ARCH_X86_64 == 0
     mov r4d, r4m
@@ -532,176 +525,150 @@ cglobal fill_generic_tile%2, 0,7,8
 %if ARCH_X86_64
     movdqa xmm_index, [words_index]
     movdqa xmm_full, [words_tile%2]
-    DEF_REG_NAME tmp0, 10
-    DEF_REG_NAME tmp1, 11
+    %define up_addr t5
 %else
     %define up_addr [rstk + delta_offs + 2 * tile_size + 4]
     %define up_pos [rstk + delta_offs + 2 * tile_size + 8]
-    DEF_REG_NAME tmp0, 0
-    DEF_REG_NAME tmp1, 1
 %endif
 
 .line_loop
-%if ARCH_X86_64
-    %define r_line r2
-%else
-    %define r_line r3
-    mov r_line, r2m
-    lea r_tmp0_, [r_line + line_size]
-    mov r2m, r_tmp0_
+%if ARCH_X86_64 == 0
+    mov t3, r2m
+    lea t0, [t3 + line_size]
+    mov r2m, t0
 %endif
-    CALC_DELTA_FLAG _tmp0_, r_line, 4,5
+    CALC_DELTA_FLAG t0, t3, t1,t2
 
-    mov r4d, [r_line + line.y_min]
-    mov r5d, [r_line + line.y_max]
+    mov t4d, [t3 + line.y_min]
+    mov t2d, [t3 + line.y_max]
 %if ARCH_X86_64
-    mov r8d, r4d
-    mov r6d, r4d
-    and r6d, 63  ; dn_pos
-    shr r4d, 6  ; dn
-    mov r9d, r5d
-    mov r7d, r5d
-    and r7d, 63  ; up_pos
-    shr r9d, 6  ; up
+    mov t8d, t4d
+    mov t6d, t4d
+    and t6d, 63  ; dn_pos
+    shr t4d, 6  ; dn
+    mov t5d, t2d
+    mov t7d, t2d
+    and t7d, 63  ; up_pos
+    shr t5d, 6  ; up
 
-    UPDATE_DELTA dn, rstk + 2 * r4 + delta_offs, _tmp0_,6, _tmp1_
-    UPDATE_DELTA up, rstk + 2 * r9 + delta_offs, _tmp0_,7, _tmp1_
-    cmp r8d, r5d
+    UPDATE_DELTA dn, rstk + 2 * t4 + delta_offs, t0,t6, t1
+    UPDATE_DELTA up, rstk + 2 * t5 + delta_offs, t0,t7, t1
+    cmp t8d, t2d
 %else
-    lea r1d, [r_tmp0 + 1]
-    cmp r4d, r5d
-    cmovnz r_tmp0, r1d  ; bit 0 -- not horz line
+    lea t1d, [t0d + 1]
+    cmp t4d, t2d
+    cmovnz t0d, t1d  ; bit 0 -- not horz line
 
-    mov r6d, r5d
-    and r6d, 63  ; up_pos
-    shr r5d, 6  ; up
-    UPDATE_DELTA up, rstk + 2 * r5 + delta_offs, _tmp0_,6, _tmp1_
+    mov t6d, t2d
+    and t6d, 63  ; up_pos
+    shr t2d, 6  ; up
+    UPDATE_DELTA up, rstk + 2 * t2 + delta_offs, t0,t6, t1
 
-    CALC_RES_ADDR %1, 5, _tmp1_
-    mov up_addr, r5
-    mov up_pos, r6d
+    CALC_RES_ADDR %1, t2, t1
+    mov up_addr, t2
+    mov up_pos, t6d
 
-    mov r6d, r4d
-    and r6d, 63  ; dn_pos
-    shr r4d, 6  ; dn
-    UPDATE_DELTA dn, rstk + 2 * r4 + delta_offs, _tmp0_,6, _tmp1_
-    test r_tmp0, 1
+    mov t6d, t4d
+    and t6d, 63  ; dn_pos
+    shr t4d, 6  ; dn
+    UPDATE_DELTA dn, rstk + 2 * t4 + delta_offs, t0,t6, t1
+    test t0d, 1
 %endif
     jz .end_line_loop
 
 %if ARCH_X86_64
-    DEF_REG_NAME a, 8
-    DEF_REG_NAME b, 12
-    DEF_REG_NAME c, 13
-
-    movsxd r_a_q, dword [r2 + line.a]
-    movsxd r_b_q, dword [r2 + line.b]
-    mov r_c_q, [r2 + line.c]
-    sar r_c_q, 7 + %1  ; c >> (tile_order + 7)
-    movsxd r_tmp0_q, dword [r2 + line.scale]
-    mov r_tmp1_q, 1 << (45 + %1)
-    imul r_a_q, r_tmp0_q
-    add r_a_q, r_tmp1_q
-    sar r_a_q, 46 + %1
-    imul r_b_q, r_tmp0_q
-    add r_b_q, r_tmp1_q
-    sar r_b_q, 46 + %1
-    imul r_c_q, r_tmp0_q
-    shr r_tmp1_q, 1 + %1
-    add r_c_q, r_tmp1_q
-    sar r_c_q, 45
+    movsxd t8, dword [t3 + line.a]
+    movsxd t9, dword [t3 + line.b]
+    mov t10, [t3 + line.c]
+    sar t10, 7 + %1  ; c >> (tile_order + 7)
+    movsxd t0, dword [t3 + line.scale]
+    mov t1, 1 << (45 + %1)
+    imul t8, t0
+    add t8, t1
+    sar t8, 46 + %1  ; a
+    imul t9, t0
+    add t9, t1
+    sar t9, 46 + %1  ; b
+    imul t10, t0
+    shr t1, 1 + %1
+    add t10, t1
+    sar t10, 45  ; c
 %else
-    DEF_REG_NAME a, 2
-    DEF_REG_NAME b, 3
-    DEF_REG_NAME c, 5
-
-    mov r0d, [r3 + line.c]
-    mov r2d, [r3 + line.c + 4]
-    mov r1d, [r3 + line.scale]
+    mov r0d, [t3 + line.c]
+    mov r2d, [t3 + line.c + 4]
+    mov r1d, [t3 + line.scale]
     shr r0d, 7 + %1
     shl r2d, 25 - %1
     or r0d, r2d  ; r0d (eax) = c >> (tile_order + 7)
     imul r1d  ; r2d (edx) = (c >> ...) * scale >> 32
     add r2d, 1 << 12
     sar r2d, 13
-    mov r_c, r2d
-    mov r0d, [r3 + line.b]  ; r0d (eax)
+    mov t10d, r2d  ; c
+    mov r0d, [t3 + line.b]  ; r0d (eax)
     imul r1d  ; r2d (edx) = b * scale >> 32
     add r2d, 1 << (13 + %1)
     sar r2d, 14 + %1
-    mov r0d, [r3 + line.a]  ; r0d (eax)
-    mov r_b, r2d
-    imul r1d  ; r_a (edx) = a * scale >> 32
-    add r_a, 1 << (13 + %1)
-    sar r_a, 14 + %1
+    mov r0d, [t3 + line.a]  ; r0d (eax)
+    mov t9d, r2d  ; b (overrides t3)
+    imul r1d  ; r2d (edx) = a * scale >> 32
+    add r2d, 1 << (13 + %1)
+    sar r2d, 14 + %1  ; a (t8d)
 %endif
 
-    mov r_tmp0, r_a
-    sar r_tmp0, 1
-    sub r_c, r_tmp0
-    mov r_tmp0, r_b
-    imul r_tmp0, r4d
-    sub r_c, r_tmp0
-    BROADCAST xmm_c, r_c
+    mov t0d, t8d  ; a
+    sar t0d, 1
+    sub t10d, t0d
+    mov t0d, t9d  ; b
+    imul t0d, t4d
+    sub t10d, t0d
+    BROADCAST xmm_c, t10d
 
-    BROADCAST xmm0, r_a
+    BROADCAST xmm0, t8d
     movdqa xmm_va8, xmm0
     pmullw xmm0, xmm_index
     psubw xmm_c, xmm0  ; c - a * i
     psllw xmm_va8, 3  ; 8 * a
 
-%if ARCH_X86_64
-    %define r_abs_a r_a
-    %define r_abs_b r_c
-%else
-    %define r_abs_a r_a_w
-    %define r_abs_ab r_a
-    %define r_abs_b r_tmp1
-%endif
-
-    mov r_tmp0, r_a
-    sar r_tmp0, 31
-    xor r_a, r_tmp0
-    sub r_a, r_tmp0  ; abs_a
-    mov r_tmp0, r_b
-    mov r_abs_b, r_b
-    sar r_tmp0, 31
-    xor r_abs_b, r_tmp0
-    sub r_abs_b, r_tmp0
+    mov t0d, t8d  ; a
+    sar t0d, 31
+    xor t8d, t0d
+    sub t8d, t0d  ; abs_a
+    mov t0d, t9d  ; b
+    mov t10d, t9d
+    sar t0d, 31
+    xor t10d, t0d
+    sub t10d, t0d  ; abs_b
 %if ARCH_X86_64 == 0
-    shl r_abs_b, 16
-    or r_abs_ab, r_abs_b
+    shl t10d, 16
+    or t8d, t10d  ; abs_ab
 %endif
 
-    CALC_RES_ADDR %1, 4, _tmp0_
+    CALC_RES_ADDR %1, t4, t0
 %if ARCH_X86_64
-    CALC_RES_ADDR %1, 9, _tmp0_, skip
-    %define up_addr r9
-    %define r_up r9
+    CALC_RES_ADDR %1, t5, t0, skip
 %endif
-    cmp r4, up_addr
+    cmp t4, up_addr
     jz .single_line
 
 %if ARCH_X86_64
-    CALC_VBA %1
+    CALC_VBA %1, t9
 %endif
 
-    test r6d, r6d
+    test t6d, t6d
     jz .generic_fist
-    mov r5d, 64
-    sub r5d, r6d  ; 64 - dn_pos
-    add r6d, 64  ; 64 + dn_pos
-    FILL_BORDER_LINE %1, r4,5,6, _tmp0_,_tmp1_, 0,1,2,3,4,5
+    mov t2d, 64
+    sub t2d, t6d  ; 64 - dn_pos
+    add t6d, 64  ; 64 + dn_pos
+    FILL_BORDER_LINE %1, t4,t8,t9,t10,t2,t6, t0,t1, 0,1,2,3,4,5
 
 %if ARCH_X86_64 == 0
-    %define r_up r6
-    mov r_up, up_addr
-    CALC_VBA %1
+    mov t5, up_addr
+    CALC_VBA %1, t9
 %endif
 
     psubw xmm_c, xmm_vba
-    add r4, 2 << %1
-    cmp r4, r_up
+    add t4, 2 << %1
+    cmp t4, t5
     jge .end_loop
 %if ARCH_X86_64 == 0
     jmp .bulk_fill
@@ -709,41 +676,41 @@ cglobal fill_generic_tile%2, 0,7,8
 
 .generic_fist
 %if ARCH_X86_64 == 0
-    mov r_up, up_addr
-    CALC_VBA %1
+    mov t5, up_addr
+    CALC_VBA %1, t9
 %endif
 
 .bulk_fill
-    mov r5d, 1 << (13 - %1)
-    mov r_tmp0, r_b
-    sar r_tmp0, 1
-    sub r5d, r_tmp0  ; base
+    mov t2d, 1 << (13 - %1)
+    mov t0d, t9d  ; b
+    sar t0d, 1
+    sub t2d, t0d  ; base
 %if ARCH_X86_64
-    mov r_tmp0, r_abs_b
-    cmp r_tmp0, r_abs_a
-    cmovg r_tmp0, r_abs_a
+    mov t0d, t10d  ; abs_b
+    cmp t0d, t8d  ; abs_a
+    cmovg t0d, t8d
 %else
-    mov r_tmp0, r_abs_ab
-    shr r_tmp0, 16  ; abs_b
-    cmp r_tmp0_w, r_abs_a
-    cmovg r_tmp0_w, r_abs_a
+    mov t0d, t8d  ; abs_ab
+    shr t0d, 16  ; abs_b
+    cmp t0w, t8w
+    cmovg t0w, t8w
 %endif
-    add r_tmp0, 2
-    sar r_tmp0, 2  ; dc
+    add t0d, 2
+    sar t0d, 2  ; dc
 %if ARCH_X86_64
-    sub r5d, r_tmp0  ; base - dc
+    sub t2d, t0d  ; base - dc
 %else
-    sub r5w, r_tmp0_w  ; base - dc
+    sub t2w, t0w  ; base - dc
 %endif
-    add r_tmp0, r_tmp0  ; 2 * dc
-    BROADCAST xmm2, r_tmp0
+    add t0d, t0d  ; 2 * dc
+    BROADCAST xmm2, t0d
 
 %if ARCH_X86_64
-    BROADCAST xmm3, r5d
+    BROADCAST xmm3, t2d
     paddw xmm_c, xmm3
 %else
-    imul r5d, 0x10001
-    movd xmm0, r5d
+    imul t2d, 0x10001
+    movd xmm0, t2d
     pshufd xmm0, xmm0, 0
     paddw xmm_c, xmm0
 
@@ -756,47 +723,45 @@ cglobal fill_generic_tile%2, 0,7,8
     psubw xmm_c, xmm_va8
 %endif
     CALC_LINE %1, 0, xmm_c,xmm2, xmm_zero,xmm_full, 1
-    movaps xmm1, [r4 + i]
+    movaps xmm1, [t4 + i]
     paddw xmm0, xmm1
-    movaps [r4 + i], xmm0
+    movaps [t4 + i], xmm0
 %assign i i + 16
 %endrep
     psubw xmm_c, xmm_vba
-    add r4, 2 << %1
-    cmp r4, r_up
+    add t4, 2 << %1
+    cmp t4, t5
     jl .internal_loop
 %if ARCH_X86_64
     psubw xmm_c, xmm3
 %else
-    movd xmm0, r5d
+    movd xmm0, t2d
     pshufd xmm0, xmm0, 0
     psubw xmm_c, xmm0
 %endif
 
 .end_loop
 %if ARCH_X86_64
-    %define r_pos r7d
-    test r_pos, r_pos
+    test t7d, t7d
     jz .end_line_loop
-    xor r6d, r6d
+    xor t6d, t6d
 %else
-    mov r5d, up_pos
-    test r5d, r5d
+    mov t2d, up_pos
+    test t2d, t2d
     jz .end_line_loop
-    mov r6d, r5d
+    mov t6d, t2d
     jmp .last_line
 %endif
 
 .single_line
 %if ARCH_X86_64 == 0
-    %define r_pos r0d
-    mov r_pos, up_pos
+    mov t7d, up_pos
 %endif
-    mov r5d, r_pos
-    sub r5d, r6d  ; up_pos - dn_pos
-    add r6d, r_pos  ; up_pos + dn_pos
+    mov t2d, t7d
+    sub t2d, t6d  ; up_pos - dn_pos
+    add t6d, t7d  ; up_pos + dn_pos
 .last_line
-    FILL_BORDER_LINE %1, r4,5,6, _tmp0_,_tmp1_, 0,1,2,3,4,5
+    FILL_BORDER_LINE %1, t4,t8,t9,t10,t2,t6, t0,t1, 0,1,2,3,4,5
 
 .end_line_loop
 %if ARCH_X86_64
@@ -811,9 +776,9 @@ cglobal fill_generic_tile%2, 0,7,8
     mov r0, r0m
     mov r1, r1m
 %endif
-    GET_RES_ADDR 2
+    GET_RES_ADDR r2
     lea r3, [rstk + delta_offs]
-    SAVE_RESULT %1, 0,1,2,3, 4,5, 0,1,2,3
+    SAVE_RESULT %1, r0,r1,r2,r3, r4,t2, 0,1,2,3
     ADD rstk, alloc_size
     RET
 %endmacro
