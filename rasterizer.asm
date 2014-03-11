@@ -214,22 +214,22 @@ FILL_HALFPLANE_TILE 5,32
 ;------------------------------------------------------------------------------
 ; struct Segment
 ; {
-;     int32_t x_min, x_max, y_min, y_max;
-;     int32_t a, b, scale, flags;
 ;     int64_t c;
+;     int32_t a, b, scale, flags;
+;     int32_t x_min, x_max, y_min, y_max;
 ; };
 ;------------------------------------------------------------------------------
 
 struc line
-    .x_min: resd 1
-    .x_max: resd 1
-    .y_min: resd 1
-    .y_max: resd 1
+    .c: resq 1
     .a: resd 1
     .b: resd 1
     .scale: resd 1
     .flags: resd 1
-    .c: resq 1
+    .x_min: resd 1
+    .x_max: resd 1
+    .y_min: resd 1
+    .y_max: resd 1
 endstruc
 
 ;------------------------------------------------------------------------------

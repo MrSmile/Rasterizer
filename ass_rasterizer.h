@@ -34,9 +34,9 @@ enum
 
 struct Segment
 {
-    int32_t x_min, x_max, y_min, y_max;
-    int32_t a, b, scale, flags;
     int64_t c;
+    int32_t a, b, scale, flags;
+    int32_t x_min, x_max, y_min, y_max;
 };
 
 
