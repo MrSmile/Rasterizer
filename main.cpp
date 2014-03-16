@@ -44,12 +44,68 @@ bool write_image(const char *file, const uint8_t *img, unsigned width, unsigned 
     return !png_close_file(&png) && res;
 }
 
+void init(Rasterizer *rst)
+{
+    constexpr bool use_avx2 = 0, use_sse2 = 1, use_tile16 = 1;
+
+    if(use_avx2)
+    {
+        if(use_tile16)
+        {
+            rst->tile_order = 4;
+            rst->fill_solid = ass_fill_solid_tile16_avx2;
+            rst->fill_halfplane = ass_fill_halfplane_tile16_avx2;
+            rst->fill_generic = ass_fill_generic_tile16_avx2;
+        }
+        else
+        {
+            rst->tile_order = 5;
+            rst->fill_solid = ass_fill_solid_tile32_avx2;
+            rst->fill_halfplane = ass_fill_halfplane_tile32_avx2;
+            rst->fill_generic = ass_fill_generic_tile32_avx2;
+        }
+    }
+    else if(use_sse2)
+    {
+        if(use_tile16)
+        {
+            rst->tile_order = 4;
+            rst->fill_solid = ass_fill_solid_tile16_sse2;
+            rst->fill_halfplane = ass_fill_halfplane_tile16_sse2;
+            rst->fill_generic = ass_fill_generic_tile16_sse2;
+        }
+        else
+        {
+            rst->tile_order = 5;
+            rst->fill_solid = ass_fill_solid_tile32_sse2;
+            rst->fill_halfplane = ass_fill_halfplane_tile32_sse2;
+            rst->fill_generic = ass_fill_generic_tile32_sse2;
+        }
+    }
+    else
+    {
+        if(use_tile16)
+        {
+            rst->tile_order = 4;
+            rst->fill_solid = ass_fill_solid_tile16_c;
+            rst->fill_halfplane = ass_fill_halfplane_tile16_c;
+            rst->fill_generic = ass_fill_generic_tile16_c;
+        }
+        else
+        {
+            rst->tile_order = 5;
+            rst->fill_solid = ass_fill_solid_tile32_c;
+            rst->fill_halfplane = ass_fill_halfplane_tile32_c;
+            rst->fill_generic = ass_fill_generic_tile32_c;
+        }
+    }
+    rasterizer_init(rst);
+}
+
 int test_c_rasterizer()
 {
-    Rasterizer rst;
-    rasterizer_init(&rst);
-
     const int w = 64, h = 64;
+    Rasterizer rst;  init(&rst);
     uint8_t bitmap[w * h] alignas(align_mask + 1);
     int res = rasterizer_test(&rst, bitmap);
     rasterizer_done(&rst);  if(!res)return -1;
@@ -63,7 +119,7 @@ void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int
     uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + align_mask) & ~align_mask), *ptr = buf;
 
 #ifdef PURE_C
-    Rasterizer rst;  rasterizer_init(&rst);
+    Rasterizer rst;  init(&rst);
     for(size_t i = 0; i < n_outlines; i++, ptr += width)
     {
         rasterizer_set_outline(&rst, &outline[i]);
@@ -102,7 +158,7 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
     clock_t tm0 = clock();
 
 #ifdef PURE_C
-    Rasterizer rst;  rasterizer_init(&rst);
+    Rasterizer rst;  init(&rst);
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         rasterizer_set_outline(&rst, &outline[i]);

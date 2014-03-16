@@ -111,7 +111,7 @@ SECTION .text
 
 ;------------------------------------------------------------------------------
 ; FILL_SOLID_TILE tile_order, suffix
-; void fill_solid_tile%2( uint8_t *buf, ptrdiff_t stride );
+; void fill_solid_tile%2(uint8_t *buf, ptrdiff_t stride);
 ;------------------------------------------------------------------------------
 
 %macro FILL_SOLID_TILE 2
@@ -164,8 +164,8 @@ FILL_SOLID_TILE 5,32
 
 ;------------------------------------------------------------------------------
 ; FILL_HALFPLANE_TILE tile_order, suffix
-; void fill_halfplane_tile%2( uint8_t *buf, ptrdiff_t stride,
-;                             int32_t a, int32_t b, int64_t c, int32_t scale );
+; void fill_halfplane_tile%2(uint8_t *buf, ptrdiff_t stride,
+;                            int32_t a, int32_t b, int64_t c, int32_t scale);
 ;------------------------------------------------------------------------------
 
 %macro FILL_HALFPLANE_TILE 2
@@ -553,9 +553,9 @@ endstruc
 
 ;------------------------------------------------------------------------------
 ; FILL_GENERIC_TILE tile_order, suffix
-; void fill_generic_tile%2( uint8_t *buf, ptrdiff_t stride,
-;                           const struct Segment *line, size_t n_lines,
-;                           int winding )
+; void fill_generic_tile%2(uint8_t *buf, ptrdiff_t stride,
+;                          const struct Segment *line, size_t n_lines,
+;                          int winding);
 ;------------------------------------------------------------------------------
 
 %macro FILL_GENERIC_TILE 2

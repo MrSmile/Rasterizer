@@ -5,7 +5,9 @@
 
 extern "C"
 {
+#include "rasterizer.h"
 #include "ass_rasterizer.h"
+int rasterizer_test(struct Rasterizer *rst, uint8_t buf[64 * 64]);  // DEBUG
 }
 
 #include "point.h"
