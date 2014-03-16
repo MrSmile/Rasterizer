@@ -338,7 +338,7 @@ endstruc
 %%zerofill_loop:
 %assign %%i 0
 %rep %%n
-    mova [%1 + %%i], m %+ m_zero
+    mova [%1 + %%i], mm_zero
 %assign %%i %%i + mmsize
 %endrep
     add %1, 128
@@ -346,7 +346,7 @@ endstruc
     jnz %%zerofill_loop
 %assign %%i 0
 %rep ((%2) / mmsize) & (%%n - 1)
-    mova [%1 + %%i], m %+ m_zero
+    mova [%1 + %%i], mm_zero
 %assign %%i %%i + mmsize
 %endrep
 %endmacro
@@ -404,7 +404,7 @@ endstruc
 %macro CALC_VBA 2
     BCASTW m_vba, %2d
 %rep (2 << %1) / mmsize - 1
-    psubw m %+ m_vba, m %+ m_van  ; b - (tile_size - (mmsize / 2)) * a
+    psubw mm_vba, mm_van  ; b - (tile_size - (mmsize / 2)) * a
 %endrep
 %endmacro
 
@@ -463,18 +463,18 @@ endstruc
 %assign %%i 0
 %rep (2 << %1) / mmsize
 %if %%i
-    psubw m %+ m_c, m %+ m_van
+    psubw mm_c, mm_van
 %endif
 %if ARCH_X86_64
-    pmulhw m%13, m %+ m_c, m%15
+    pmulhw m%13, mm_c, m%15
 %else
     BCASTW %14, %8d
-    pmulhw m%13, m %+ m_c, m%14
+    pmulhw m%13, mm_c, m%14
 %endif
     psubw m%13, m%10  ; c1
     paddw m%14, m%13, m%11  ; c2
-    pmaxsw m%13, m %+ m_zero
-    pmaxsw m%14, m %+ m_zero
+    pmaxsw m%13, mm_zero
+    pmaxsw m%14, mm_zero
     pminsw m%13, m%12
     pminsw m%14, m%12
     paddw m%13, m%14
@@ -602,6 +602,14 @@ cglobal fill_generic_tile%2, 5,14,11
 cglobal fill_generic_tile%2, 0,7,8
 %endif
 
+    %define mm_zero  m %+ m_zero
+    %define mm_full  m %+ m_full
+    %define mm_c     m %+ m_c
+    %define mm_vba   m %+ m_vba
+%if a_shift
+    %define mm_van   m %+ m_van
+%endif
+
 %if HAVE_ALIGNED_STACK
     %assign alloc_size alloc_size + stack_offset + gprsize + (mmsize - 1)
     %assign alloc_size (alloc_size & ~(mmsize - 1)) - stack_offset - gprsize
@@ -613,7 +621,7 @@ cglobal fill_generic_tile%2, 0,7,8
     SUB rstk, alloc_size
 
     GET_RES_ADDR t0
-    pxor m %+ m_zero, m %+ m_zero
+    pxor mm_zero, mm_zero
     ZEROFILL t0, buf_size, t1
 
 %if ARCH_X86_64 == 0
@@ -624,7 +632,7 @@ cglobal fill_generic_tile%2, 0,7,8
 
 %if ARCH_X86_64
     mova mm_index, [words_index]
-    mova m %+ m_full, [words_tile%2]
+    mova mm_full, [words_tile%2]
     %define up_addr t5
 %else
     %define up_addr [rstk + delta_offs + 2 * tile_size + 4]
@@ -725,10 +733,10 @@ cglobal fill_generic_tile%2, 0,7,8
 
     BCASTW 0, t8d
 %if a_shift
-    psllw m %+ m_van, m0, a_shift  ; a * (mmsize / 2)
+    psllw mm_van, m0, a_shift  ; a * (mmsize / 2)
 %endif
     pmullw m0, mm_index
-    psubw m %+ m_c, m0  ; c - a * i
+    psubw mm_c, m0  ; c - a * i
 
     mov t0d, t8d  ; a
     sar t0d, 31
@@ -769,7 +777,7 @@ cglobal fill_generic_tile%2, 0,7,8
 %endif
 %endif
 
-    psubw m %+ m_c, m %+ m_vba
+    psubw mm_c, mm_vba
     add t4, 2 << %1
     cmp t4, t5
     jge .end_loop
@@ -812,33 +820,33 @@ cglobal fill_generic_tile%2, 0,7,8
 
 %if ARCH_X86_64
     BCASTW 3, t2d
-    paddw m %+ m_c, m3
+    paddw mm_c, m3
 %else
     BCASTW 0, t2d
-    paddw m %+ m_c, m0
+    paddw mm_c, m0
 
-    mova m %+ m_full, [words_tile%2]
+    mova mm_full, [words_tile%2]
 %endif
 .internal_loop
 %assign i 0
 %rep (2 << %1) / mmsize
 %if i
-    psubw m %+ m_c, m %+ m_van
+    psubw mm_c, mm_van
 %endif
     CALC_LINE %1, 0, m_c,2, m_zero,m_full, 1
     paddw m0, [t4 + i]
     mova [t4 + i], m0
 %assign i i + mmsize
 %endrep
-    psubw m %+ m_c, m %+ m_vba
+    psubw mm_c, mm_vba
     add t4, 2 << %1
     cmp t4, t5
     jl .internal_loop
 %if ARCH_X86_64
-    psubw m %+ m_c, m3
+    psubw mm_c, m3
 %else
     BCASTW 0, t2d
-    psubw m %+ m_c, m0
+    psubw mm_c, m0
 %endif
 
 .end_loop
