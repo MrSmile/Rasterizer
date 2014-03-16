@@ -12,6 +12,8 @@ using namespace std;
 
 #define PURE_C
 
+constexpr size_t align_mask = 31;
+
 
 
 void print_outline(const FT_Outline &path)
@@ -48,7 +50,7 @@ int test_c_rasterizer()
     rasterizer_init(&rst);
 
     const int w = 64, h = 64;
-    uint8_t bitmap[w * h] alignas(16);
+    uint8_t bitmap[w * h] alignas(align_mask + 1);
     int res = rasterizer_test(&rst, bitmap);
     rasterizer_done(&rst);  if(!res)return -1;
     print_bitmap(bitmap, w, h, w);  return 0;
@@ -57,8 +59,8 @@ int test_c_rasterizer()
 void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height)
 {
     ptrdiff_t stride = width * n_outlines;
-    vector<uint8_t> image(3 * height * stride + 15, 0);
-    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + 15) & ~15), *ptr = buf;
+    vector<uint8_t> image(3 * height * stride + align_mask, 0);
+    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + align_mask) & ~align_mask), *ptr = buf;
 
 #ifdef PURE_C
     Rasterizer rst;  rasterizer_init(&rst);
@@ -94,8 +96,8 @@ void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int
 
 void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width, int height, int repeat)
 {
-    vector<uint8_t> image(width * height + 15);
-    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + 15) & ~15);
+    vector<uint8_t> image(width * height + align_mask);
+    uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + align_mask) & ~align_mask);
 
     clock_t tm0 = clock();
 

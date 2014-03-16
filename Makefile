@@ -1,7 +1,7 @@
 
 SOURCE = raster.cpp fill.cpp main.cpp
 HEADER = point.h raster.h
-FLAGS = -I/usr/include/freetype2 -Wall
+FLAGS = -I/usr/include/freetype2 -Wall -mpreferred-stack-boundary=5
 #FLAGS += -m32 -msse2
 CFLAGS = -std=c99 $(FLAGS)
 CXXFLAGS = -std=c++11 -fno-exceptions -Wno-parentheses $(FLAGS)
