@@ -3,7 +3,7 @@
 #include "ass_rasterizer.c"
 
 
-int rasterizer_test(struct Rasterizer *rst, uint8_t buf[64 * 64])  // DEBUG
+int rasterizer_test(ASS_Rasterizer *rst, uint8_t buf[64 * 64])  // DEBUG
 {
     OutlinePoint pt[] =
     {

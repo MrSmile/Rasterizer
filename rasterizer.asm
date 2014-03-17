@@ -308,7 +308,7 @@ FILL_HALFPLANE_TILE 4,16
 FILL_HALFPLANE_TILE 5,32
 
 ;------------------------------------------------------------------------------
-; struct Segment
+; struct segment
 ; {
 ;     int64_t c;
 ;     int32_t a, b, scale, flags;
@@ -554,7 +554,7 @@ endstruc
 ;------------------------------------------------------------------------------
 ; FILL_GENERIC_TILE tile_order, suffix
 ; void fill_generic_tile%2(uint8_t *buf, ptrdiff_t stride,
-;                          const struct Segment *line, size_t n_lines,
+;                          const struct segment *line, size_t n_lines,
 ;                          int winding);
 ;------------------------------------------------------------------------------
 

@@ -141,7 +141,7 @@ static inline void update_border_line16(int16_t res[16],
 }
 
 void ass_fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride,
-                               const struct Segment *line, size_t n_lines,
+                               const struct segment *line, size_t n_lines,
                                int winding)
 {
     int i, j;
@@ -153,7 +153,7 @@ void ass_fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride,
         delta[j] = 0;
 
     static const int16_t full = 1 << 10;
-    const struct Segment *end = line + n_lines;
+    const struct segment *end = line + n_lines;
     for (; line != end; ++line) {
         assert(line->y_min >= 0 && line->y_min < 1 << 10);
         assert(line->y_max > 0 && line->y_max <= 1 << 10);
@@ -259,7 +259,7 @@ static inline void update_border_line32(int16_t res[32],
 }
 
 void ass_fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride,
-                               const struct Segment *line, size_t n_lines,
+                               const struct segment *line, size_t n_lines,
                                int winding)
 {
     int i, j;
@@ -271,7 +271,7 @@ void ass_fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride,
         delta[j] = 0;
 
     static const int16_t full = 1 << 9;
-    const struct Segment *end = line + n_lines;
+    const struct segment *end = line + n_lines;
     for (; line != end; ++line) {
         assert(line->y_min >= 0 && line->y_min < 1 << 11);
         assert(line->y_max > 0 && line->y_max <= 1 << 11);

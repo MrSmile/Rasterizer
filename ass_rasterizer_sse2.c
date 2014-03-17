@@ -162,7 +162,7 @@ static inline void update_border_line16(__m128i res[2],
     }
 }
 
-void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct segment *line, size_t n_lines, int winding)
 {
     int i, j;
     __m128i res[16][2];  int16_t delta[18];
@@ -171,7 +171,7 @@ void fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
 
     const __m128i zero = _mm_set1_epi16(0);
     const __m128i full = _mm_set1_epi16(1 << 10);
-    const struct Segment *end = line + n_lines;
+    const struct segment *end = line + n_lines;
     for(; line != end; line++)
     {
         assert(line->y_min >= 0 && line->y_min < 1 << 10);
@@ -274,7 +274,7 @@ static inline void update_border_line32(__m128i res[4],
     }
 }
 
-void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segment *line, size_t n_lines, int winding)
+void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct segment *line, size_t n_lines, int winding)
 {
     int i, j;
     __m128i res[32][4];  int16_t delta[34];
@@ -283,7 +283,7 @@ void fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride, const struct Segme
 
     const __m128i zero = _mm_set1_epi16(0);
     const __m128i full = _mm_set1_epi16(1 << 9);
-    const struct Segment *end = line + n_lines;
+    const struct segment *end = line + n_lines;
     for(; line != end; line++)
     {
         assert(line->y_min >= 0 && line->y_min < 1 << 11);

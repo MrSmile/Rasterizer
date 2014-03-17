@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 
-struct Segment;
+struct segment;
 
 void ass_fill_solid_tile16_sse2(uint8_t *buf, ptrdiff_t stride);
 void ass_fill_solid_tile32_sse2(uint8_t *buf, ptrdiff_t stride);
@@ -32,10 +32,10 @@ void ass_fill_halfplane_tile16_sse2(uint8_t *buf, ptrdiff_t stride,
 void ass_fill_halfplane_tile32_sse2(uint8_t *buf, ptrdiff_t stride,
                                     int32_t a, int32_t b, int64_t c, int32_t scale);
 void ass_fill_generic_tile16_sse2(uint8_t *buf, ptrdiff_t stride,
-                                  const struct Segment *line, size_t n_lines,
+                                  const struct segment *line, size_t n_lines,
                                   int winding);
 void ass_fill_generic_tile32_sse2(uint8_t *buf, ptrdiff_t stride,
-                                  const struct Segment *line, size_t n_lines,
+                                  const struct segment *line, size_t n_lines,
                                   int winding);
 
 void ass_fill_solid_tile16_avx2(uint8_t *buf, ptrdiff_t stride);
@@ -45,10 +45,10 @@ void ass_fill_halfplane_tile16_avx2(uint8_t *buf, ptrdiff_t stride,
 void ass_fill_halfplane_tile32_avx2(uint8_t *buf, ptrdiff_t stride,
                                     int32_t a, int32_t b, int64_t c, int32_t scale);
 void ass_fill_generic_tile16_avx2(uint8_t *buf, ptrdiff_t stride,
-                                  const struct Segment *line, size_t n_lines,
+                                  const struct segment *line, size_t n_lines,
                                   int winding);
 void ass_fill_generic_tile32_avx2(uint8_t *buf, ptrdiff_t stride,
-                                  const struct Segment *line, size_t n_lines,
+                                  const struct segment *line, size_t n_lines,
                                   int winding);
 
 

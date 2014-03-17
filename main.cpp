@@ -44,7 +44,7 @@ bool write_image(const char *file, const uint8_t *img, unsigned width, unsigned 
     return !png_close_file(&png) && res;
 }
 
-void init(Rasterizer *rst)
+void init(ASS_Rasterizer *rst)
 {
     constexpr bool use_avx2 = 0, use_sse2 = 1, use_tile16 = 1;
 
@@ -105,7 +105,7 @@ void init(Rasterizer *rst)
 int test_c_rasterizer()
 {
     const int w = 64, h = 64;
-    Rasterizer rst;  init(&rst);
+    ASS_Rasterizer rst;  init(&rst);
     uint8_t bitmap[w * h] alignas(align_mask + 1);
     int res = rasterizer_test(&rst, bitmap);
     rasterizer_done(&rst);  if(!res)return -1;
@@ -119,7 +119,7 @@ void compare_results(FT_Library lib, FT_Outline *outline, size_t n_outlines, int
     uint8_t *buf = reinterpret_cast<uint8_t *>(reinterpret_cast<intptr_t>(image.data() + align_mask) & ~align_mask), *ptr = buf;
 
 #ifdef PURE_C
-    Rasterizer rst;  init(&rst);
+    ASS_Rasterizer rst;  init(&rst);
     for(size_t i = 0; i < n_outlines; i++, ptr += width)
     {
         rasterizer_set_outline(&rst, &outline[i]);
@@ -158,7 +158,7 @@ void benchmark(FT_Library lib, FT_Outline *outline, size_t n_outlines, int width
     clock_t tm0 = clock();
 
 #ifdef PURE_C
-    Rasterizer rst;  init(&rst);
+    ASS_Rasterizer rst;  init(&rst);
     for(int k = 0; k < repeat; k++)for(size_t i = 0; i < n_outlines; i++)
     {
         rasterizer_set_outline(&rst, &outline[i]);

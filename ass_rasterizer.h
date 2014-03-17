@@ -34,7 +34,7 @@ enum {
     SEGFLAG_EXACT_TOP = 32
 };
 
-struct Segment {
+struct segment {
     int64_t c;
     int32_t a, b, scale, flags;
     int32_t x_min, x_max, y_min, y_max;
@@ -45,7 +45,7 @@ typedef void (*FillSolidTileFunc)(uint8_t *buf, ptrdiff_t stride);
 typedef void (*FillHalfplaneTileFunc)(uint8_t *buf, ptrdiff_t stride,
                                       int32_t a, int32_t b, int64_t c, int32_t scale);
 typedef void (*FillGenericTileFunc)(uint8_t *buf, ptrdiff_t stride,
-                                    const struct Segment *line, size_t n_lines,
+                                    const struct segment *line, size_t n_lines,
                                     int winding);
 
 void ass_fill_solid_tile16_c(uint8_t *buf, ptrdiff_t stride);
@@ -55,27 +55,27 @@ void ass_fill_halfplane_tile16_c(uint8_t *buf, ptrdiff_t stride,
 void ass_fill_halfplane_tile32_c(uint8_t *buf, ptrdiff_t stride,
                                  int32_t a, int32_t b, int64_t c, int32_t scale);
 void ass_fill_generic_tile16_c(uint8_t *buf, ptrdiff_t stride,
-                               const struct Segment *line, size_t n_lines,
+                               const struct segment *line, size_t n_lines,
                                int winding);
 void ass_fill_generic_tile32_c(uint8_t *buf, ptrdiff_t stride,
-                               const struct Segment *line, size_t n_lines,
+                               const struct segment *line, size_t n_lines,
                                int winding);
 
-struct Rasterizer {
+typedef struct ass_rasterizer {
     int tile_order;
     FillSolidTileFunc fill_solid;
     FillHalfplaneTileFunc fill_halfplane;
     FillGenericTileFunc fill_generic;
 
     int32_t x_min, x_max, y_min, y_max;
-    struct Segment *linebuf[2];
+    struct segment *linebuf[2];
     size_t size[2], capacity[2];
-};
+} ASS_Rasterizer;
 
-void rasterizer_init(struct Rasterizer *rst);
-void rasterizer_done(struct Rasterizer *rst);
-int rasterizer_set_outline(struct Rasterizer *rst, const FT_Outline *path);
-int rasterizer_fill(struct Rasterizer *rst, uint8_t *buf, int x0, int y0,
+void rasterizer_init(ASS_Rasterizer *rst);
+void rasterizer_done(ASS_Rasterizer *rst);
+int rasterizer_set_outline(ASS_Rasterizer *rst, const FT_Outline *path);
+int rasterizer_fill(ASS_Rasterizer *rst, uint8_t *buf, int x0, int y0,
                     int width, int height, ptrdiff_t stride, int vert_flip);
 
 
